@@ -13,7 +13,8 @@ cli/
 │   │   ├── index.ts           # プロジェクト設定（.aqua/config.json）
 │   │   └── credentials.ts     # サーバー認証情報（~/.aqua/credentials.json）
 │   ├── commands/              # CLI コマンド実装
-│   │   └── execute.ts         # execute コマンド + 共通実行ロジック（executeQAPlan）
+│   │   ├── execute.ts         # execute コマンド + 共通実行ロジック（executeQAPlan）
+│   │   └── record.ts          # record コマンド（ブラウザ操作記録）
 │   ├── setup/                 # セットアップ・認証フロー
 │   │   ├── login.ts           # 認証（ブラウザ）+ ensureCredential
 │   │   ├── init.ts            # プロジェクト設定（git remote から project_key を自動生成）
@@ -28,7 +29,8 @@ cli/
 │   │       ├── common-scenario.ts # 共通シナリオ CRUD ツール
 │   │       ├── environment.ts # 環境設定ツール
 │   │       ├── memory.ts      # プロジェクトメモリツール
-│   │       └── setup.ts       # プロジェクトセットアップ状態確認ツール（check_project_setup）
+│   │       ├── setup.ts       # プロジェクトセットアップ状態確認ツール（check_project_setup）
+│   │       └── recorder.ts    # ブラウザ操作記録ツール（record_browser_actions）
 │   ├── driver/                # テスト実行ドライバー
 │   │   ├── types.ts           # Driver インターフェース
 │   │   ├── http.ts            # HTTP Driver (fetch + assertion)
@@ -36,6 +38,9 @@ cli/
 │   │   ├── step-utils.ts      # ステップ実行共有ユーティリティ（依存順序解決・依存チェック・ブラウザ確認）
 │   │   ├── executor.ts        # シナリオ実行エンジン（サーバー記録あり）
 │   │   └── scenario-runner.ts # 単一シナリオ軽量実行（サーバー記録なし、run_scenario 用）
+│   ├── recorder/              # ブラウザ操作記録（Playwright codegen 連携）
+│   │   ├── recorder.ts        # codegen サブプロセスの起動・管理
+│   │   └── codegen-parser.ts  # codegen JS 出力 → BrowserStep[] パーサー
 │   ├── environment/           # 環境設定の読み込み・解決
 │   │   ├── types.ts           # EnvironmentFile 型定義 + zod スキーマ
 │   │   ├── loader.ts          # ファイル読み込み・secrets 解決・バリデーション
@@ -80,6 +85,7 @@ npx tsc --noEmit       # 型チェック
 - `aqua-cli whoami` - 認証中のユーザー情報を表示（ID, Email, 表示名）
 - `aqua-cli init` - プロジェクト設定（git remote から `project_key` を自動生成）。`.aqua/config.json` に `server_url` と `project_key` を保存。事前に `aqua-cli login` が必要
 - `aqua-cli execute <qa_plan_id>` - QA Plan を直接実行。MCP を通さずにテスト実行可能。`--env <name>` で環境指定（省略時はインタラクティブ選択）、`--plan-version <n>` でバージョン指定、`--var key=value` で変数オーバーライド（複数可）。実行開始直後に Web UI の URL を表示し、結果はシナリオ単位の階層構造で出力
+- `aqua-cli record [url]` - Playwright codegen でブラウザ操作を記録。ブラウザが開き、ユーザーが操作。ブラウザを閉じると BrowserStep[] の JSON を stdout に出力。ログイン不要
 - `aqua-cli mcp-server` - MCP サーバーを起動。事前に `aqua-cli login` が必要
 
 ### 認証フロー
@@ -134,6 +140,10 @@ npx tsc --noEmit       # 型チェック
 
 - `get_project_memory` - プロジェクトメモリを取得（未設定時はテンプレートを返却）。QA プラン作成・実行を通じて蓄積された知識（アプリ構造、認証フロー、有効なセレクタ等）を確認
 - `save_project_memory` - プロジェクトメモリを保存（全体上書き）。実行で学んだ知見を記録
+
+### Recorder ツール
+
+- `record_browser_actions` - Playwright codegen を使ってブラウザ操作を記録。ブラウザが開きユーザーが操作、閉じると BrowserStep[] を返す。返された steps は `update_qa_plan` / `create_common_scenario` / `run_scenario` にそのまま使用可能。セレクタは Playwright が自動生成（role=, text=, CSS 等）
 
 ### Setup ツール
 

@@ -110,6 +110,18 @@ aqua-cli execute <qa_plan_id> [--env <name>] [--plan-version <n>] [--var key=val
 - `--plan-version <n>` — execute a specific version (defaults to latest)
 - `--var key=value` — variable override (repeatable)
 
+### `aqua-cli record`
+
+Record browser actions using Playwright codegen. Opens a Chromium browser for you to operate; outputs `BrowserStep[]` JSON to stdout when you close the browser.
+
+```bash
+aqua-cli record [url]
+```
+
+- `[url]` — initial URL to navigate to (optional)
+
+The output can be used directly with `update_qa_plan`, `create_common_scenario`, or `run_scenario`.
+
 ### `aqua-cli web`
 
 Open the web UI in your browser (requires login).
@@ -176,6 +188,12 @@ Once the MCP server is running, the following tools are available to the AI agen
 | `list_common_scenarios` | List common scenarios in the project |
 | `update_common_scenario` | Update a common scenario |
 | `delete_common_scenario` | Delete a common scenario |
+
+### Recording
+
+| Tool | Description |
+|------|-------------|
+| `record_browser_actions` | Open a browser for the user to operate and record actions as `BrowserStep[]` |
 
 ### Memory
 

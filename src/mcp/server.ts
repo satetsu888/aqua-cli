@@ -10,6 +10,7 @@ import { registerMemoryTools } from "./tools/memory.js";
 import { registerScenarioTools } from "./tools/scenario.js";
 import { registerCommonScenarioTools } from "./tools/common-scenario.js";
 import { registerSetupTools } from "./tools/setup.js";
+import { registerRecorderTools } from "./tools/recorder.js";
 
 export async function startMCPServer(
   serverURL: string,
@@ -134,6 +135,14 @@ When you want to quickly test a single scenario without recording to the server,
 This is useful during Step 2 (plan creation) or Step 5 (iteration) to validate individual scenarios before executing the full plan.
 You can pass qa_plan_id to inherit the plan's default variables.
 
+## Browser Recording
+
+Use record_browser_actions to open a real browser and record user actions.
+The user operates the browser; when they close it, the recorded actions are returned as BrowserStep[].
+This is useful when complex UI interactions are hard to describe — let the user demonstrate the workflow and capture the exact selectors and action sequence.
+Input field values (fill actions) are automatically replaced with {{variable_name}} template variables — the original typed values are not included. The variable names are derived from the field's label, placeholder, or id. You need to map these variable names to actual values in an environment configuration or as execution parameters.
+Use the returned steps with update_qa_plan, create_common_scenario, or run_scenario.
+
 ## Common Scenarios
 
 Reusable scenario templates stored at the project level. Use list_common_scenarios to see available templates, and reference them in update_qa_plan scenarios via common_scenario_id. Common scenarios are snapshot-copied into QA plans (not linked by reference), so changes to a common scenario do not affect existing plans.
@@ -151,6 +160,7 @@ Each project can store a memory document for accumulating project knowledge lear
   registerEnvironmentTools(server);
   registerSetupTools(server, client, config);
   registerMemoryTools(server, client);
+  registerRecorderTools(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

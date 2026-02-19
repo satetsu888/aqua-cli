@@ -9,6 +9,7 @@ import { getCredential, removeCredential } from "./config/credentials.js";
 import { runLogin } from "./setup/login.js";
 import { runInit } from "./setup/init.js";
 import { runExecute } from "./commands/execute.js";
+import { runRecord } from "./commands/record.js";
 import { AquaClient } from "./api/client.js";
 
 declare const __CLI_VERSION__: string;
@@ -124,6 +125,15 @@ program
       await runExecute(qaPlanId, opts);
     }
   );
+
+program
+  .command("record [url]")
+  .description(
+    "Record browser actions using Playwright codegen. Opens a browser for you to operate; outputs BrowserStep[] JSON to stdout when you close the browser."
+  )
+  .action(async (url?: string) => {
+    await runRecord(url);
+  });
 
 program
   .command("web")
