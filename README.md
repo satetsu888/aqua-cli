@@ -19,7 +19,7 @@ DB (SQLite / PostgreSQL)
 The CLI embeds two test drivers:
 
 - **HTTP Driver** — sends HTTP requests and validates responses
-- **Browser Driver** — automates browsers via Playwright (navigate, click, fill, screenshot, etc.)
+- **Browser Driver** — automates browsers via Playwright (navigate, click, fill, screenshot, iframe switching, etc.)
 
 ## Prerequisites
 

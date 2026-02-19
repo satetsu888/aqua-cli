@@ -146,7 +146,7 @@ npx tsc --noEmit       # 型チェック
 `executor.ts`（サーバー記録あり）と `scenario-runner.ts`（サーバー記録なし）が `step-utils.ts` の共有ユーティリティ（`resolveStepOrder`, `checkStepDependencies`, `checkBrowserDependencies`）を使ってシナリオ実行を統括し、各ステップの `action` に応じて適切な Driver を呼び出す:
 
 - **HTTP Driver** (`http.ts`) - `http_request` アクション。fetch でリクエストし、レスポンスに対してアサーションを実行。`poll` オプションで HTTP ポーリングにも対応（`poll.until` で終了条件、`poll.interval_ms` / `poll.timeout_ms` で間隔・タイムアウトを指定）
-- **Browser Driver** (`browser.ts`) - `browser` アクション。Playwright でブラウザ操作（goto, click, type, hover, select_option, check/uncheck, press, screenshot, wait_for_selector, wait_for_url, double_click, focus, upload_file, set_header）。デフォルトタイムアウト10秒（`timeout_ms` でステップ単位で変更可能）。`goto` 失敗時はナビゲーションエラーとしてシナリオ内の残りステップを自動スキップ（`abortScenario` フラグ）
+- **Browser Driver** (`browser.ts`) - `browser` アクション。Playwright でブラウザ操作（goto, click, type, hover, select_option, check/uncheck, press, screenshot, wait_for_selector, wait_for_url, double_click, focus, upload_file, set_header, switch_to_frame, switch_to_main_frame）。デフォルトタイムアウト10秒（`timeout_ms` でステップ単位で変更可能）。`goto` 失敗時はナビゲーションエラーとしてシナリオ内の残りステップを自動スキップ（`abortScenario` フラグ）。`switch_to_frame` で iframe 内に切り替え、`switch_to_main_frame` でトップレベルに戻る。フレーム切り替え後は既存の全アクション・アサーションがフレーム内で動作する
 
 ### アサーション型
 

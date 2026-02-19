@@ -91,6 +91,8 @@ export const BrowserStepSchema = z.union([
       path: z.string().describe("File path to upload"),
     }),
   }),
+  z.object({ switch_to_frame: z.string().describe("CSS selector for the iframe element to switch into (e.g. 'iframe#payment', 'iframe[name=\"checkout\"]')") }),
+  z.object({ switch_to_main_frame: z.literal(true).describe("Switch back to the top-level page frame") }),
 ]);
 
 export const BrowserConfigSchema = z.object({

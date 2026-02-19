@@ -6,6 +6,7 @@ import {
   LocalStorageValueAssertionSchema,
   BrowserAssertionSchema,
   BrowserConfigSchema,
+  BrowserStepSchema,
   AssertionSchema,
 } from "./types.js";
 
@@ -159,6 +160,41 @@ describe("BrowserAssertionSchema discriminated union", () => {
   });
 });
 
+describe("BrowserStepSchema - iframe actions", () => {
+  it("parses switch_to_frame with CSS selector", () => {
+    const result = BrowserStepSchema.parse({ switch_to_frame: "iframe#payment" });
+    expect(result).toEqual({ switch_to_frame: "iframe#payment" });
+  });
+
+  it("parses switch_to_frame with attribute selector", () => {
+    const result = BrowserStepSchema.parse({
+      switch_to_frame: 'iframe[name="checkout"]',
+    });
+    expect(result).toEqual({ switch_to_frame: 'iframe[name="checkout"]' });
+  });
+
+  it("rejects switch_to_frame with non-string value", () => {
+    expect(() => BrowserStepSchema.parse({ switch_to_frame: 123 })).toThrow();
+  });
+
+  it("parses switch_to_main_frame with true", () => {
+    const result = BrowserStepSchema.parse({ switch_to_main_frame: true });
+    expect(result).toEqual({ switch_to_main_frame: true });
+  });
+
+  it("rejects switch_to_main_frame with false", () => {
+    expect(() =>
+      BrowserStepSchema.parse({ switch_to_main_frame: false })
+    ).toThrow();
+  });
+
+  it("rejects switch_to_main_frame with string", () => {
+    expect(() =>
+      BrowserStepSchema.parse({ switch_to_main_frame: "main" })
+    ).toThrow();
+  });
+});
+
 describe("BrowserConfigSchema", () => {
   it("parses config without timeout_ms", () => {
     const result = BrowserConfigSchema.parse({
@@ -182,6 +218,21 @@ describe("BrowserConfigSchema", () => {
         timeout_ms: "fast",
       })
     ).toThrow();
+  });
+
+  it("parses config with iframe actions in steps", () => {
+    const result = BrowserConfigSchema.parse({
+      steps: [
+        { goto: "http://example.com" },
+        { switch_to_frame: "iframe#widget" },
+        { click: ".btn" },
+        { switch_to_main_frame: true },
+        { click: ".other-btn" },
+      ],
+    });
+    expect(result.steps).toHaveLength(5);
+    expect(result.steps[1]).toEqual({ switch_to_frame: "iframe#widget" });
+    expect(result.steps[3]).toEqual({ switch_to_main_frame: true });
   });
 });
 

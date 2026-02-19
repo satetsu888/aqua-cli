@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, Page, Frame } from "playwright";
 import type {
   Step,
   StepResult,
@@ -27,6 +27,7 @@ export class BrowserDriver {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private activeFrame: Page | Frame | null = null;
   private extraHeaders: Record<string, string> = {};
   private initialStorageState: BrowserStorageState | undefined;
   private proxyConfig: ResolvedProxyConfig | undefined;
@@ -45,6 +46,9 @@ export class BrowserDriver {
 
     try {
       await this.ensureBrowser();
+
+      // Reset active frame to main page at the start of each step
+      this.activeFrame = this.page!;
 
       // Apply step-level timeout if specified
       const timeoutMs = config.timeout_ms ?? DEFAULT_TIMEOUT_MS;
@@ -129,16 +133,19 @@ export class BrowserDriver {
     }
     this.context = await this.browser.newContext(contextOpts);
     this.page = await this.context.newPage();
+    this.activeFrame = this.page;
   }
 
   private async executeBrowserStep(
     browserStep: BrowserStep,
     artifacts: BrowserArtifact[]
   ): Promise<void> {
-    if (!this.page) throw new Error("Browser page not initialized");
+    if (!this.page || !this.activeFrame) throw new Error("Browser page not initialized");
+
+    const frame = this.activeFrame;
 
     if ("goto" in browserStep) {
-      // Apply extra headers if set
+      // goto always navigates the main page and resets active frame
       if (Object.keys(this.extraHeaders).length > 0) {
         await this.page.setExtraHTTPHeaders(this.extraHeaders);
       }
@@ -147,14 +154,28 @@ export class BrowserDriver {
       } catch (err) {
         throw new NavigationError(err instanceof Error ? err.message : String(err));
       }
+      this.activeFrame = this.page;
+    } else if ("switch_to_frame" in browserStep) {
+      const iframeElement = await frame.$(browserStep.switch_to_frame);
+      if (!iframeElement) {
+        throw new Error(`iframe not found: ${browserStep.switch_to_frame}`);
+      }
+      const childFrame = await iframeElement.contentFrame();
+      if (!childFrame) {
+        throw new Error(`Element is not an iframe: ${browserStep.switch_to_frame}`);
+      }
+      this.activeFrame = childFrame;
+    } else if ("switch_to_main_frame" in browserStep) {
+      this.activeFrame = this.page;
     } else if ("wait_for_selector" in browserStep) {
-      await this.page.waitForSelector(browserStep.wait_for_selector);
+      await frame.waitForSelector(browserStep.wait_for_selector);
     } else if ("click" in browserStep) {
-      await this.page.click(browserStep.click);
+      await frame.click(browserStep.click);
     } else if ("type" in browserStep) {
       const { selector, text } = browserStep.type;
-      await this.page.fill(selector, text);
+      await frame.fill(selector, text);
     } else if ("screenshot" in browserStep) {
+      // screenshot always captures the full page
       const screenshotBuffer = await this.page.screenshot({ fullPage: true });
       artifacts.push({
         name: browserStep.screenshot,
@@ -163,29 +184,30 @@ export class BrowserDriver {
         data: Buffer.from(screenshotBuffer),
       });
     } else if ("set_header" in browserStep) {
+      // setExtraHTTPHeaders is page-level only
       Object.assign(this.extraHeaders, browserStep.set_header);
       await this.page.setExtraHTTPHeaders(this.extraHeaders);
     } else if ("hover" in browserStep) {
-      await this.page.hover(browserStep.hover);
+      await frame.hover(browserStep.hover);
     } else if ("select_option" in browserStep) {
       const { selector, value } = browserStep.select_option;
-      await this.page.selectOption(selector, value);
+      await frame.selectOption(selector, value);
     } else if ("check" in browserStep) {
-      await this.page.check(browserStep.check);
+      await frame.check(browserStep.check);
     } else if ("uncheck" in browserStep) {
-      await this.page.uncheck(browserStep.uncheck);
+      await frame.uncheck(browserStep.uncheck);
     } else if ("press" in browserStep) {
       const { selector, key } = browserStep.press;
-      await this.page.press(selector, key);
+      await frame.press(selector, key);
     } else if ("wait_for_url" in browserStep) {
-      await this.page.waitForURL(`**/*${browserStep.wait_for_url}*`);
+      await frame.waitForURL(`**/*${browserStep.wait_for_url}*`);
     } else if ("double_click" in browserStep) {
-      await this.page.dblclick(browserStep.double_click);
+      await frame.dblclick(browserStep.double_click);
     } else if ("focus" in browserStep) {
-      await this.page.focus(browserStep.focus);
+      await frame.focus(browserStep.focus);
     } else if ("upload_file" in browserStep) {
       const { selector, path } = browserStep.upload_file;
-      await this.page.setInputFiles(selector, path);
+      await frame.setInputFiles(selector, path);
     }
   }
 
@@ -221,7 +243,7 @@ export class BrowserDriver {
           break;
         }
         case "url_contains": {
-          const currentUrl = this.page.url();
+          const currentUrl = this.activeFrame!.url();
           const expected = assertion.expected;
           results.push({
             type: "url_contains",
@@ -235,7 +257,7 @@ export class BrowserDriver {
           break;
         }
         case "title": {
-          const title = await this.page.title();
+          const title = await this.activeFrame!.title();
           const expected = assertion.expected;
           results.push({
             type: "title",
@@ -315,7 +337,7 @@ export class BrowserDriver {
     contains?: string
   ): Promise<AssertionResultData> {
     try {
-      const element = await this.page!.$(selector);
+      const element = await this.activeFrame!.$(selector);
       if (!element) {
         return {
           type: "element_text",
@@ -361,7 +383,7 @@ export class BrowserDriver {
     selector: string
   ): Promise<AssertionResultData> {
     try {
-      const element = await this.page!.$(selector);
+      const element = await this.activeFrame!.$(selector);
       const visible = element ? await element.isVisible() : false;
       return {
         type: "element_not_visible",
@@ -386,7 +408,7 @@ export class BrowserDriver {
     expected: number
   ): Promise<AssertionResultData> {
     try {
-      const elements = await this.page!.$$(selector);
+      const elements = await this.activeFrame!.$$(selector);
       const count = elements.length;
       return {
         type: "element_count",
@@ -413,7 +435,7 @@ export class BrowserDriver {
     expected: string
   ): Promise<AssertionResultData> {
     try {
-      const element = await this.page!.$(selector);
+      const element = await this.activeFrame!.$(selector);
       if (!element) {
         return {
           type: "element_attribute",
@@ -447,7 +469,7 @@ export class BrowserDriver {
     selector: string
   ): Promise<AssertionResultData> {
     try {
-      const element = await this.page!.$(selector);
+      const element = await this.activeFrame!.$(selector);
       const visible = element ? await element.isVisible() : false;
       return {
         type: "element_visible",
@@ -535,7 +557,7 @@ export class BrowserDriver {
     key: string
   ): Promise<AssertionResultData> {
     try {
-      const value = await this.page!.evaluate(
+      const value = await this.activeFrame!.evaluate(
         // @ts-expect-error - localStorage exists in browser context
         (k) => localStorage.getItem(k),
         key
@@ -565,7 +587,7 @@ export class BrowserDriver {
     match?: "exact" | "contains"
   ): Promise<AssertionResultData> {
     try {
-      const value = await this.page!.evaluate(
+      const value = await this.activeFrame!.evaluate(
         // @ts-expect-error - localStorage exists in browser context
         (k) => localStorage.getItem(k),
         key
@@ -615,6 +637,7 @@ export class BrowserDriver {
       await this.browser.close().catch(() => {});
       this.browser = null;
     }
+    this.activeFrame = null;
     this.extraHeaders = {};
   }
 }
