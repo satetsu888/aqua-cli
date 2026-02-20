@@ -1,5 +1,6 @@
 import type { Scenario, Step, StepResult } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/index.js";
+import type { StepCompleteEvent, OnStepCompleteCallback } from "./executor.js";
 import { HttpDriver } from "./http.js";
 import { BrowserDriver } from "./browser.js";
 import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies } from "./step-utils.js";
@@ -34,9 +35,21 @@ export class ScenarioRunner {
     scenario: Scenario,
     variables: Record<string, string>,
     masker: Masker,
+    onStepComplete?: OnStepCompleteCallback,
   ): Promise<ScenarioRunResult> {
     const results: StepResult[] = [];
     const completedSteps = new Map<string, StepResult>();
+    const totalSteps = scenario.steps.length;
+    let completedStepIndex = 0;
+
+    const notifyStepComplete = (event: Omit<StepCompleteEvent, "index" | "totalSteps">) => {
+      onStepComplete?.({
+        ...event,
+        index: completedStepIndex,
+        totalSteps,
+      });
+      completedStepIndex++;
+    };
 
     // Check if required variables are available
     if (scenario.requires && scenario.requires.length > 0) {
@@ -55,6 +68,13 @@ export class ScenarioRunner {
           };
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
+          notifyStepComplete({
+            scenarioName: scenario.name,
+            stepKey: step.step_key,
+            action: step.action,
+            status: "skipped",
+            errorMessage,
+          });
         }
         return this.buildResult(results, variables, masker);
       }
@@ -97,6 +117,13 @@ export class ScenarioRunner {
           };
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
+          notifyStepComplete({
+            scenarioName: scenario.name,
+            stepKey: step.step_key,
+            action: step.action,
+            status: "skipped",
+            errorMessage: "Dependency not met",
+          });
           continue;
         }
 
@@ -150,6 +177,14 @@ export class ScenarioRunner {
         results.push(result);
         completedSteps.set(step.step_key, result);
 
+        notifyStepComplete({
+          scenarioName: scenario.name,
+          stepKey: step.step_key,
+          action: step.action,
+          status: result.status,
+          errorMessage: result.errorMessage,
+        });
+
         // Abort remaining steps in this scenario on navigation failure
         if (result.abortScenario) {
           const currentIdx = ordered.indexOf(step);
@@ -165,6 +200,13 @@ export class ScenarioRunner {
             };
             results.push(skippedResult);
             completedSteps.set(remaining.step_key, skippedResult);
+            notifyStepComplete({
+              scenarioName: scenario.name,
+              stepKey: remaining.step_key,
+              action: remaining.action,
+              status: "skipped",
+              errorMessage: "Scenario aborted due to navigation failure",
+            });
           }
           break;
         }

@@ -40,10 +40,16 @@ vi.mock("../../driver/executor.js", () => {
   };
 });
 
-type ToolCallback = (args: Record<string, unknown>) => Promise<{
+type ToolCallback = (args: Record<string, unknown>, extra: Record<string, unknown>) => Promise<{
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
 }>;
+
+const mockExtra = {
+  _meta: {},
+  sendNotification: vi.fn().mockResolvedValue(undefined),
+  signal: new AbortController().signal,
+};
 
 function createMockServer() {
   const tools = new Map<string, ToolCallback>();
@@ -58,7 +64,10 @@ function createMockServer() {
         tools.set(name, handler);
       }
     ),
-    getHandler: (name: string) => tools.get(name)!,
+    getHandler: (name: string) => {
+      const handler = tools.get(name)!;
+      return (args: Record<string, unknown>) => handler(args, mockExtra);
+    },
   };
 }
 

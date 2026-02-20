@@ -56,7 +56,7 @@ Secrets are masked in the response for safety.`,
         .optional()
         .describe("Plan version to use for variables (defaults to latest)"),
     },
-    async ({ scenario, env_name, environment, qa_plan_id, version }) => {
+    async ({ scenario, env_name, environment, qa_plan_id, version }, extra) => {
       // Build variables from plan
       let planVariables: Record<string, string> = {};
       if (qa_plan_id) {
@@ -142,7 +142,27 @@ Secrets are masked in the response for safety.`,
       const runner = new ScenarioRunner(resolvedEnv?.proxy);
       let result;
       try {
-        result = await runner.run(internalScenario, variables, masker);
+        const progressToken = extra._meta?.progressToken;
+        result = await runner.run(internalScenario, variables, masker, (event) => {
+          if (progressToken === undefined) return;
+          const icon =
+            event.status === "passed"
+              ? "PASS"
+              : event.status === "failed"
+                ? "FAIL"
+                : event.status === "error"
+                  ? "ERROR"
+                  : "SKIP";
+          extra.sendNotification({
+            method: "notifications/progress" as const,
+            params: {
+              progressToken,
+              progress: event.index + 1,
+              total: event.totalSteps,
+              message: `[${icon}] ${event.scenarioName} / ${event.stepKey}`,
+            },
+          }).catch(() => { /* non-critical */ });
+        });
       } catch (err) {
         return {
           content: [{

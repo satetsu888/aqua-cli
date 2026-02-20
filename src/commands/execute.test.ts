@@ -150,6 +150,7 @@ describe("executeQAPlan", () => {
       vars,
       undefined,
       undefined,
+      undefined,
       undefined
     );
   });
@@ -172,6 +173,7 @@ describe("executeQAPlan", () => {
       undefined,
       expect.objectContaining({ variables: { api_key: "key" } }),
       "staging",
+      undefined,
       undefined
     );
   });
@@ -190,7 +192,8 @@ describe("executeQAPlan", () => {
       undefined,
       undefined,
       undefined,
-      onCreated
+      onCreated,
+      undefined
     );
   });
 

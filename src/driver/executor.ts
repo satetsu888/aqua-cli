@@ -21,6 +21,18 @@ export interface ExecutionSummary {
   resolvedVariables: Record<string, string>;
 }
 
+export interface StepCompleteEvent {
+  scenarioName: string;
+  stepKey: string;
+  action: string;
+  status: string;
+  errorMessage?: string;
+  index: number;
+  totalSteps: number;
+}
+
+export type OnStepCompleteCallback = (event: StepCompleteEvent) => void | Promise<void>;
+
 export class QAPlanExecutor {
   private client: AquaClient;
 
@@ -35,6 +47,7 @@ export class QAPlanExecutor {
     resolvedEnv?: ResolvedEnvironment,
     envName?: string,
     onExecutionCreated?: (executionId: string, executionUrl: string) => void,
+    onStepComplete?: OnStepCompleteCallback,
   ): Promise<ExecutionSummary> {
     // Check browser dependencies before creating execution record
     const hasBrowserSteps = plan.scenarios.some((s) =>
@@ -107,6 +120,13 @@ export class QAPlanExecutor {
     let hasFailure = false;
     let hasError = false;
 
+    // Compute total steps for progress tracking
+    const totalSteps = plan.scenarios.reduce(
+      (sum, s) => sum + s.steps.length,
+      0
+    );
+    let completedStepIndex = 0;
+
     // Shared state across scenarios
     const globalCompletedSteps = new Map<string, StepResult>();
     let browserStorageState: BrowserStorageState | undefined;
@@ -122,6 +142,14 @@ export class QAPlanExecutor {
           httpDriver,
           proxyConfig,
           browserStorageState,
+          (event) => {
+            onStepComplete?.({
+              ...event,
+              index: completedStepIndex,
+              totalSteps,
+            });
+            completedStepIndex++;
+          },
         );
         allResults.push(...scenarioResult.results);
         browserStorageState = scenarioResult.browserStorageState ?? browserStorageState;
@@ -161,6 +189,7 @@ export class QAPlanExecutor {
     httpDriver: HttpDriver,
     proxyConfig?: ResolvedProxyConfig,
     browserStorageState?: BrowserStorageState,
+    onStepComplete?: (event: Omit<StepCompleteEvent, "index" | "totalSteps">) => void,
   ): Promise<{ results: StepResult[]; browserStorageState?: BrowserStorageState }> {
     const results: StepResult[] = [];
 
@@ -182,6 +211,13 @@ export class QAPlanExecutor {
           await this.reportStep(executionId, scenario.name, step, skippedResult);
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
+          onStepComplete?.({
+            scenarioName: scenario.name,
+            stepKey: step.step_key,
+            action: step.action,
+            status: "skipped",
+            errorMessage,
+          });
         }
         return { results };
       }
@@ -218,6 +254,13 @@ export class QAPlanExecutor {
           await this.reportStep(executionId, scenario.name, step, skippedResult);
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
+          onStepComplete?.({
+            scenarioName: scenario.name,
+            stepKey: step.step_key,
+            action: step.action,
+            status: "skipped",
+            errorMessage: "Dependency not met",
+          });
           continue;
         }
 
@@ -273,6 +316,14 @@ export class QAPlanExecutor {
         results.push(result);
         completedSteps.set(step.step_key, result);
 
+        onStepComplete?.({
+          scenarioName: scenario.name,
+          stepKey: step.step_key,
+          action: step.action,
+          status: result.status,
+          errorMessage: result.errorMessage,
+        });
+
         // Abort remaining steps in this scenario on navigation failure
         if (result.abortScenario) {
           const currentIdx = ordered.indexOf(step);
@@ -289,6 +340,13 @@ export class QAPlanExecutor {
             await this.reportStep(executionId, scenario.name, remaining, skippedResult);
             results.push(skippedResult);
             completedSteps.set(remaining.step_key, skippedResult);
+            onStepComplete?.({
+              scenarioName: scenario.name,
+              stepKey: remaining.step_key,
+              action: remaining.action,
+              status: "skipped",
+              errorMessage: "Scenario aborted due to navigation failure",
+            });
           }
           break;
         }

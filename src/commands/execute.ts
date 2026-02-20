@@ -1,5 +1,5 @@
 import { AquaClient } from "../api/client.js";
-import { QAPlanExecutor, type ExecutionSummary } from "../driver/executor.js";
+import { QAPlanExecutor, type ExecutionSummary, type OnStepCompleteCallback } from "../driver/executor.js";
 import { loadEnvironment, listEnvironments } from "../environment/index.js";
 import { collectVariableReferences } from "../utils/template.js";
 import { getCredential } from "../config/credentials.js";
@@ -13,6 +13,7 @@ export interface ExecuteQAPlanOptions {
   envName?: string;
   vars?: Record<string, string>;
   onExecutionCreated?: (executionId: string, executionUrl: string) => void;
+  onStepComplete?: OnStepCompleteCallback;
 }
 
 /**
@@ -84,7 +85,7 @@ export async function executeQAPlan(
 
   // Execute
   const executor = new QAPlanExecutor(client);
-  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated);
+  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated, opts.onStepComplete);
 }
 
 // --- CLI command handler ---

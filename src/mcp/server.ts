@@ -11,6 +11,7 @@ import { registerScenarioTools } from "./tools/scenario.js";
 import { registerCommonScenarioTools } from "./tools/common-scenario.js";
 import { registerSetupTools } from "./tools/setup.js";
 import { registerRecorderTools } from "./tools/recorder.js";
+import { registerProgressTools } from "./tools/progress.js";
 
 export async function startMCPServer(
   serverURL: string,
@@ -83,6 +84,7 @@ A QA Plan requires at least one version (created via update_qa_plan) before it c
 ### Step 3: Execute
 execute_qa_plan - Execute the plan and get results.
 Pass env_name to select the target environment.
+For long-running plans, use async=true to start execution in the background, then poll with get_execution_progress.
 
 ### Step 4: Analyze and Learn
 Review execution results. If failures occur:
@@ -161,6 +163,7 @@ Each project can store a memory document for accumulating project knowledge lear
   registerSetupTools(server, client, config);
   registerMemoryTools(server, client);
   registerRecorderTools(server);
+  registerProgressTools(server, client);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
