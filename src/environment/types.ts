@@ -13,6 +13,25 @@ export const secretEntrySchema = z.discriminatedUnion("type", [
     type: z.literal("op"),
     value: z.string(),
   }),
+  z.object({
+    type: z.literal("aws_sm"),
+    value: z.string(),
+    region: z.string().optional(),
+    json_key: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("gcp_sm"),
+    value: z.string(),
+    project: z.string().optional(),
+    version: z.string().optional(),
+    json_key: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("hcv"),
+    value: z.string(),
+    field: z.string().optional(),
+    mount: z.string().optional(),
+  }),
 ]);
 
 export const proxyConfigSchema = z.object({
@@ -22,10 +41,13 @@ export const proxyConfigSchema = z.object({
   password: secretEntrySchema.optional(),
 });
 
+export const secretProvidersSchema = z.record(z.record(z.string())).optional();
+
 export const environmentFileSchema = z.object({
   notes: z.string().optional(),
   variables: z.record(z.string()).optional(),
   secrets: z.record(secretEntrySchema).optional(),
+  secret_providers: secretProvidersSchema,
   proxy: proxyConfigSchema.optional(),
 });
 

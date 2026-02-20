@@ -35,7 +35,7 @@ describe("environmentFileSchema", () => {
 
   it("rejects invalid secret type", () => {
     const data = {
-      secrets: { k: { type: "vault", value: "v" } },
+      secrets: { k: { type: "unknown_type", value: "v" } },
     };
     const result = environmentFileSchema.safeParse(data);
     expect(result.success).toBe(false);
@@ -47,6 +47,125 @@ describe("environmentFileSchema", () => {
     };
     const result = environmentFileSchema.safeParse(data);
     expect(result.success).toBe(false);
+  });
+
+  describe("aws_sm secrets", () => {
+    it("accepts aws_sm with value only", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "aws_sm", value: "my-secret" } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts aws_sm with all optional fields", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: {
+          k: {
+            type: "aws_sm",
+            value: "staging/db-credentials",
+            region: "ap-northeast-1",
+            json_key: "password",
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects aws_sm without value", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "aws_sm" } },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("gcp_sm secrets", () => {
+    it("accepts gcp_sm with value only", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "gcp_sm", value: "my-secret" } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts gcp_sm with all optional fields", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: {
+          k: {
+            type: "gcp_sm",
+            value: "api-key",
+            project: "my-project-123",
+            version: "3",
+            json_key: "key",
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects gcp_sm without value", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "gcp_sm" } },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("hcv secrets", () => {
+    it("accepts hcv with value only", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "hcv", value: "myapp/staging/db" } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts hcv with all optional fields", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: {
+          k: {
+            type: "hcv",
+            value: "myapp/keys",
+            field: "signing_key",
+            mount: "kv",
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects hcv without value", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "hcv" } },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("secret_providers", () => {
+    it("accepts secret_providers with provider configs", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "hcv", value: "myapp/db", field: "password" } },
+        secret_providers: {
+          hcv: { address: "https://vault.example.com:8200", namespace: "staging" },
+          aws_sm: { region: "ap-northeast-1", profile: "staging" },
+          gcp_sm: { project: "my-project-123" },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts empty secret_providers", () => {
+      const result = environmentFileSchema.safeParse({
+        secret_providers: {},
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts environment file without secret_providers", () => {
+      const result = environmentFileSchema.safeParse({
+        secrets: { k: { type: "literal", value: "v" } },
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe("proxy", () => {

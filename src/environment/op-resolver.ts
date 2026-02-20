@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { ExternalSecretResolver } from "./resolver-registry.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -43,3 +44,24 @@ export async function readOpSecret(reference: string): Promise<string> {
     );
   }
 }
+
+export const opResolver: ExternalSecretResolver = {
+  type: "op",
+  cliName: "1Password CLI (op)",
+  installUrl: "https://developer.1password.com/docs/cli/get-started/",
+  checkAvailable: checkOpAvailable,
+  async resolve(entry, _context) {
+    return readOpSecret(entry.value);
+  },
+  validate(entry) {
+    if (!entry.value.startsWith("op://")) {
+      return [
+        {
+          severity: "warning",
+          message: `value should start with "op://" (got "${entry.value}")`,
+        },
+      ];
+    }
+    return [];
+  },
+};

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolveEnvironment } from "./loader.js";
+import { registerResolver, getResolver } from "./resolver-registry.js";
+import type { ExternalSecretResolver } from "./resolver-registry.js";
 import type { EnvironmentFile } from "./types.js";
 
 describe("resolveEnvironment", () => {
@@ -111,6 +113,117 @@ describe("resolveEnvironment", () => {
       const result = await resolveEnvironment(envFile, new Set(["needed"]));
       expect(result.variables.needed).toBe("ok");
       expect(result.variables.unneeded).toBeUndefined();
+    });
+  });
+
+  describe("external resolver integration", () => {
+    // Register a mock resolver for testing the registry-based dispatch
+    const mockResolve = vi.fn();
+    const mockCheckAvailable = vi.fn();
+
+    beforeEach(() => {
+      mockResolve.mockReset();
+      mockCheckAvailable.mockReset();
+      mockCheckAvailable.mockResolvedValue(true);
+
+      // Register mock resolvers that simulate aws_sm and hcv
+      // overriding the real ones for test purposes
+      const mockAwsResolver: ExternalSecretResolver = {
+        type: "aws_sm",
+        cliName: "Mock AWS CLI",
+        installUrl: "https://example.com",
+        checkAvailable: mockCheckAvailable,
+        resolve: mockResolve,
+        validate: () => [],
+      };
+      registerResolver(mockAwsResolver);
+    });
+
+    it("delegates to registered resolver for external types", async () => {
+      mockResolve.mockResolvedValue("resolved-aws-value");
+      const envFile: EnvironmentFile = {
+        secrets: {
+          db_pass: { type: "aws_sm", value: "staging/db", json_key: "password" },
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.variables.db_pass).toBe("resolved-aws-value");
+      expect(result.secretKeys.has("db_pass")).toBe(true);
+      expect(result.secretValues.has("resolved-aws-value")).toBe(true);
+      expect(mockResolve).toHaveBeenCalledOnce();
+    });
+
+    it("checks CLI availability before resolving", async () => {
+      mockCheckAvailable.mockResolvedValue(false);
+      const envFile: EnvironmentFile = {
+        secrets: {
+          s: { type: "aws_sm", value: "my-secret" },
+        },
+      };
+      await expect(resolveEnvironment(envFile)).rejects.toThrow(
+        "Mock AWS CLI is not installed"
+      );
+      expect(mockResolve).not.toHaveBeenCalled();
+    });
+
+    it("skips CLI check for filtered-out external secrets", async () => {
+      mockCheckAvailable.mockResolvedValue(false);
+      const envFile: EnvironmentFile = {
+        secrets: {
+          needed: { type: "literal", value: "ok" },
+          aws_secret: { type: "aws_sm", value: "not-needed" },
+        },
+      };
+      // aws_secret is filtered out, so CLI check should not fail
+      const result = await resolveEnvironment(envFile, new Set(["needed"]));
+      expect(result.variables.needed).toBe("ok");
+      expect(result.variables.aws_secret).toBeUndefined();
+    });
+
+    it("throws for unknown secret type", async () => {
+      // Manually construct an entry with unknown type to test the fallback
+      // This bypasses Zod validation since we call resolveEnvironment directly
+      const envFile = {
+        secrets: {
+          s: { type: "unknown_type", value: "v" },
+        },
+      } as unknown as EnvironmentFile;
+      await expect(resolveEnvironment(envFile)).rejects.toThrow(
+        'Unknown secret type: "unknown_type"'
+      );
+    });
+
+    it("passes secret_providers config to resolver", async () => {
+      mockResolve.mockResolvedValue("resolved-value");
+      const envFile: EnvironmentFile = {
+        secrets: {
+          s: { type: "aws_sm", value: "my-secret" },
+        },
+        secret_providers: {
+          aws_sm: { region: "eu-west-1", profile: "staging" },
+        },
+      };
+      await resolveEnvironment(envFile);
+      expect(mockResolve).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "aws_sm", value: "my-secret" }),
+        expect.any(String),
+        { region: "eu-west-1", profile: "staging" },
+      );
+    });
+
+    it("passes undefined providerConfig when secret_providers is not set", async () => {
+      mockResolve.mockResolvedValue("resolved-value");
+      const envFile: EnvironmentFile = {
+        secrets: {
+          s: { type: "aws_sm", value: "my-secret" },
+        },
+      };
+      await resolveEnvironment(envFile);
+      expect(mockResolve).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "aws_sm" }),
+        expect.any(String),
+        undefined,
+      );
     });
   });
 

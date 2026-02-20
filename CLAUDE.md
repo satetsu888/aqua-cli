@@ -44,7 +44,11 @@ cli/
 │   ├── environment/           # 環境設定の読み込み・解決
 │   │   ├── types.ts           # EnvironmentFile 型定義 + zod スキーマ
 │   │   ├── loader.ts          # ファイル読み込み・secrets 解決・バリデーション
+│   │   ├── resolver-registry.ts # ExternalSecretResolver インターフェース + レジストリ
 │   │   ├── op-resolver.ts     # 1Password CLI (op) 連携
+│   │   ├── aws-sm-resolver.ts # AWS Secrets Manager 連携
+│   │   ├── gcp-sm-resolver.ts # GCP Secret Manager 連携
+│   │   ├── hcv-resolver.ts    # HashiCorp Vault 連携
 │   │   └── index.ts
 │   ├── masking/               # サーバー送信前のシークレットマスキング
 │   │   ├── types.ts           # MaskRule インターフェース
@@ -222,7 +226,15 @@ QA Plan 内の `{{variable}}` は実行時の environment で展開される（`
   "secrets": {
     "api_key": { "type": "literal", "value": "dev-key-123" },
     "auth_token": { "type": "env", "value": "STAGING_AUTH_TOKEN" },
-    "db_password": { "type": "op", "value": "op://Development/staging-db/password" }
+    "db_password": { "type": "op", "value": "op://Development/staging-db/password" },
+    "aws_secret": { "type": "aws_sm", "value": "staging/db-credentials", "region": "ap-northeast-1", "json_key": "password" },
+    "gcp_secret": { "type": "gcp_sm", "value": "staging-api-key", "project": "my-project-123" },
+    "vault_secret": { "type": "hcv", "value": "myapp/staging/keys", "field": "signing_key" }
+  },
+  "secret_providers": {
+    "hcv": { "address": "https://vault.example.com:8200", "namespace": "staging" },
+    "aws_sm": { "region": "ap-northeast-1", "profile": "staging" },
+    "gcp_sm": { "project": "my-project-123" }
   },
   "proxy": {
     "server": "http://proxy.corp.com:3128",
@@ -235,9 +247,15 @@ QA Plan 内の `{{variable}}` は実行時の environment で展開される（`
 
 - `notes`: 環境固有のメモ（Markdown）。前提条件、制約、テストアカウント、認証手順等を記録。`list_environments` の出力に表示され、AI エージェントが QA Plan 設計前に環境の特性を把握できる
 - `variables`: そのまま使う通常の変数。URL は `api_base_url`（API 用）と `web_base_url`（ブラウザ用）で使い分ける
-- `secrets`: `type` で値の解決方法を指定（`literal` = そのまま、`env` = 環境変数から取得、`op` = 1Password CLI で実行時に取得）
-- `op` type は実行時に `op read` コマンドで値を取得する。`op` type の secret がある場合、実行前に CLI の存在を自動チェックする
-- secrets の解決はプランが参照する変数のみに限定される（`collectVariableReferences` でプランを静的解析し、`loadEnvironment` / `resolveEnvironment` の `requiredKeys` パラメータでフィルタ）。プランが使わない `op` type の secret があっても 1Password ログインは不要
+- `secrets`: `type` で値の解決方法を指定。外部リゾルバは `ExternalSecretResolver` インターフェースで統一管理（`resolver-registry.ts`）
+  - `literal` = そのまま、`env` = 環境変数から取得
+  - `op` = 1Password CLI（`op read <reference>`）
+  - `aws_sm` = AWS Secrets Manager（`aws secretsmanager get-secret-value`）。`region`（optional）、`json_key`（optional: JSON シークレットから特定キーを抽出）
+  - `gcp_sm` = GCP Secret Manager（`gcloud secrets versions access`）。`project`（optional）、`version`（optional、デフォルト "latest"）、`json_key`（optional）
+  - `hcv` = HashiCorp Vault（`vault kv get`）。`field`（optional: 特定フィールドを取得）、`mount`（optional、デフォルト "secret"）
+- `secret_providers`: 外部リゾルバのプロバイダーレベル設定。各 type のデフォルトを環境単位で定義（`hcv.address`, `aws_sm.region`/`aws_sm.profile`, `gcp_sm.project` 等）。エントリレベルのフィールドが優先。プロセス環境変数（`VAULT_ADDR` 等）へのフォールバックもあるが、MCP サーバー経由では `secret_providers` で設定するのが推奨
+- 外部 CLI ベースの type（`op`, `aws_sm`, `gcp_sm`, `hcv`）がある場合、実行前に CLI の存在を自動チェックする
+- secrets の解決はプランが参照する変数のみに限定される（`collectVariableReferences` でプランを静的解析し、`loadEnvironment` / `resolveEnvironment` の `requiredKeys` パラメータでフィルタ）。プランが使わない外部 type の secret があっても CLI ログインは不要
 - `proxy`: HTTP リクエスト・ブラウザアクセスに使用するプロキシ設定（optional）。`server` はプロキシ URL、`bypass` はバイパスドメイン（カンマ区切り）、`username`/`password` は SecretEntry 形式の認証情報（optional）。HTTP Driver は undici ProxyAgent、Browser Driver は Playwright の newContext proxy オプションで適用
 - 変数優先順位: QA Plan variables < environment file < execute_qa_plan の environment 引数
 - secrets はサーバー送信時にレイヤー単位でマスクされる（`***` に置換）

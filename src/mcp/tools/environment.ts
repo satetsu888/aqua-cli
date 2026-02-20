@@ -121,17 +121,22 @@ Secrets are resolved at execution time and masked before sending to server.`,
       secrets: z
         .record(secretEntrySchema)
         .optional()
-        .describe("Secrets with resolution type. literal: use value directly, env: read from environment variable, op: read from 1Password CLI at execution time (value is a secret reference URI). Example: { api_key: { type: \"literal\", value: \"key-123\" }, auth_token: { type: \"env\", value: \"STAGING_AUTH_TOKEN\" }, db_password: { type: \"op\", value: \"op://vault/item/password\" } }"),
+        .describe("Secrets with resolution type. literal: use value directly, env: read from environment variable, op: read from 1Password CLI (value is secret reference URI), aws_sm: read from AWS Secrets Manager (value is secret name/ARN, optional region and json_key), gcp_sm: read from GCP Secret Manager (value is secret name, optional project, version, json_key), hcv: read from HashiCorp Vault (value is secret path, optional field and mount). Example: { api_key: { type: \"literal\", value: \"key-123\" }, auth_token: { type: \"env\", value: \"STAGING_AUTH_TOKEN\" }, db_password: { type: \"op\", value: \"op://vault/item/password\" }, aws_secret: { type: \"aws_sm\", value: \"staging/db\", region: \"ap-northeast-1\", json_key: \"password\" }, gcp_secret: { type: \"gcp_sm\", value: \"api-key\", project: \"my-project\" }, vault_secret: { type: \"hcv\", value: \"myapp/keys\", field: \"signing_key\" } }"),
+      secret_providers: z
+        .record(z.record(z.string()))
+        .optional()
+        .describe("Provider-level configuration for external secret resolvers. Keys are provider types, values are config objects. These set defaults that apply to all secrets of that type (entry-level fields override). Example: { hcv: { address: \"https://vault.example.com:8200\", namespace: \"staging\" }, aws_sm: { region: \"ap-northeast-1\", profile: \"staging\" }, gcp_sm: { project: \"my-project-123\" } }"),
       proxy: proxyConfigSchema
         .optional()
         .describe("Proxy configuration for HTTP requests and browser access. server: proxy URL (e.g. \"http://proxy:3128\"), bypass: comma-separated domains to bypass, username/password: optional proxy auth credentials using SecretEntry format."),
     },
-    async ({ env_name, notes, variables, secrets, proxy }) => {
+    async ({ env_name, notes, variables, secrets, secret_providers, proxy }) => {
       try {
         const envFile = {
           ...(notes ? { notes } : {}),
           ...(variables ? { variables } : {}),
           ...(secrets ? { secrets } : {}),
+          ...(secret_providers ? { secret_providers } : {}),
           ...(proxy ? { proxy } : {}),
         };
         const filePath = await saveEnvironment(env_name, envFile);

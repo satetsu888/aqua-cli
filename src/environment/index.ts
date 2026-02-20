@@ -1,3 +1,15 @@
+// Register all external secret resolvers
+import { registerResolver } from "./resolver-registry.js";
+import { opResolver } from "./op-resolver.js";
+import { awsSmResolver } from "./aws-sm-resolver.js";
+import { gcpSmResolver } from "./gcp-sm-resolver.js";
+import { hcvResolver } from "./hcv-resolver.js";
+
+registerResolver(opResolver);
+registerResolver(awsSmResolver);
+registerResolver(gcpSmResolver);
+registerResolver(hcvResolver);
+
 export {
   loadEnvironment,
   resolveEnvironment,
@@ -13,3 +25,5 @@ export type {
   ResolvedEnvironment,
   ResolvedProxyConfig,
 } from "./types.js";
+export type { ExternalSecretResolver } from "./resolver-registry.js";
+export { registerResolver, getResolver, getAllResolvers } from "./resolver-registry.js";

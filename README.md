@@ -217,6 +217,73 @@ Stores server authentication credentials (per server URL). Managed by `aqua-cli 
 }
 ```
 
+### Environment Files
+
+Environment files are stored at `.aqua/environments/<name>.json` and define variables and secrets for test execution. Create them with the `create_environment` MCP tool or manually.
+
+```jsonc
+{
+  "notes": "Staging environment — VPN required",
+  "variables": {
+    "api_base_url": "https://staging-api.example.com",
+    "web_base_url": "https://staging.example.com"
+  },
+  "secrets": {
+    "api_key": { "type": "literal", "value": "dev-key-123" },
+    "auth_token": { "type": "env", "value": "STAGING_AUTH_TOKEN" },
+    "db_password": { "type": "op", "value": "op://Development/staging-db/password" },
+    "aws_secret": { "type": "aws_sm", "value": "staging/db-creds", "json_key": "password" },
+    "gcp_secret": { "type": "gcp_sm", "value": "staging-api-key" },
+    "vault_secret": { "type": "hcv", "value": "myapp/staging/keys", "field": "signing_key" }
+  },
+  "secret_providers": {
+    "hcv": { "address": "https://vault.example.com:8200" },
+    "aws_sm": { "region": "ap-northeast-1", "profile": "staging" },
+    "gcp_sm": { "project": "my-project-123" }
+  }
+}
+```
+
+#### Secret Types
+
+| Type | Source | CLI Required | Value Format |
+|------|--------|-------------|--------------|
+| `literal` | Inline value | None | Plain text |
+| `env` | Process environment variable | None | Variable name (e.g. `MY_TOKEN`) |
+| `op` | 1Password | `op` | Secret reference URI (e.g. `op://vault/item/field`) |
+| `aws_sm` | AWS Secrets Manager | `aws` | Secret name or ARN |
+| `gcp_sm` | GCP Secret Manager | `gcloud` | Secret name |
+| `hcv` | HashiCorp Vault | `vault` | Secret path (e.g. `myapp/staging/db`) |
+
+**Per-entry options for `aws_sm`:**
+- `region` (optional) — AWS region override for this specific secret
+- `json_key` (optional) — Extract a specific key from a JSON-formatted secret
+
+**Per-entry options for `gcp_sm`:**
+- `project` (optional) — GCP project override for this specific secret
+- `version` (optional) — Secret version. Defaults to `latest`
+- `json_key` (optional) — Extract a specific key from a JSON-formatted secret
+
+**Per-entry options for `hcv`:**
+- `field` (optional) — Specific field to retrieve from the KV secret
+- `mount` (optional) — KV mount point. Defaults to `secret`
+
+#### Provider Configuration (`secret_providers`)
+
+Provider-level defaults for external secret resolvers. These apply to all secrets of the corresponding type. Per-entry options take precedence over provider defaults.
+
+| Provider | Key | Description |
+|----------|-----|-------------|
+| `hcv` | `address` | Vault server URL (equivalent to `VAULT_ADDR` env var) |
+| `hcv` | `namespace` | Vault namespace (for Vault Enterprise) |
+| `aws_sm` | `region` | Default AWS region for all `aws_sm` secrets |
+| `aws_sm` | `profile` | AWS named profile to use |
+| `gcp_sm` | `project` | Default GCP project for all `gcp_sm` secrets |
+
+This is the recommended way to configure external resolvers, especially when running as an MCP server where process environment variables may not be available.
+
+Secrets are resolved locally at execution time. Only secrets actually referenced by the QA plan (via `{{variable}}` templates) are resolved — unused secrets don't require CLI authentication. All secret values are masked (`***`) before being sent to the server.
+
 ### Environment Variables
 
 | Variable | Description |

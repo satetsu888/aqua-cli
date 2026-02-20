@@ -3,7 +3,7 @@ import { join, basename, extname, dirname } from "node:path";
 import { getProjectRoot } from "../config/projectRoot.js";
 import { environmentFileSchema } from "./types.js";
 import type { EnvironmentFile, ResolvedEnvironment, SecretEntry, ResolvedProxyConfig } from "./types.js";
-import { checkOpAvailable, readOpSecret } from "./op-resolver.js";
+import { getResolver, type ProviderConfig } from "./resolver-registry.js";
 
 /**
  * Load and resolve an environment file by name.
@@ -47,7 +47,8 @@ export async function loadEnvironment(
  */
 async function resolveSecretEntry(
   entry: SecretEntry,
-  context: string
+  context: string,
+  secretProviders?: Record<string, ProviderConfig>,
 ): Promise<string> {
   switch (entry.type) {
     case "literal":
@@ -61,23 +62,35 @@ async function resolveSecretEntry(
       }
       return envValue;
     }
-    case "op":
-      return await readOpSecret(entry.value);
+    default: {
+      const resolver = getResolver(entry.type);
+      if (!resolver) {
+        throw new Error(`Unknown secret type: "${entry.type}" in ${context}`);
+      }
+      return resolver.resolve(entry, context, secretProviders?.[entry.type]);
+    }
   }
 }
 
 /**
- * Check if any SecretEntry values require 1Password CLI, and verify availability.
+ * Check that all required external CLI tools are available before resolving.
  */
-async function ensureOpAvailable(entries: SecretEntry[]): Promise<void> {
-  const hasOp = entries.some((e) => e.type === "op");
-  if (hasOp) {
-    const opAvailable = await checkOpAvailable();
-    if (!opAvailable) {
+async function ensureResolversAvailable(entries: SecretEntry[]): Promise<void> {
+  const externalTypes = new Set(
+    entries
+      .map((e) => e.type)
+      .filter((t) => t !== "literal" && t !== "env")
+  );
+
+  for (const type of externalTypes) {
+    const resolver = getResolver(type);
+    if (!resolver) continue;
+    const available = await resolver.checkAvailable();
+    if (!available) {
       throw new Error(
-        "1Password CLI (op) is not installed. " +
-          'This environment includes secrets with type "op" that require the 1Password CLI.\n' +
-          "Install it from: https://developer.1password.com/docs/cli/get-started/"
+        `${resolver.cliName} is not installed. ` +
+          `This environment includes secrets with type "${type}" that require ${resolver.cliName}.\n` +
+          `Install it from: ${resolver.installUrl}`
       );
     }
   }
@@ -102,17 +115,19 @@ export async function resolveEnvironment(
       )
     : [];
 
-  // Collect all SecretEntry values to check op CLI availability once
+  // Collect all SecretEntry values to check CLI availability once
   const allEntries: SecretEntry[] = [
     ...secretEntries.map(([, entry]) => entry),
     ...(envFile.proxy?.username ? [envFile.proxy.username] : []),
     ...(envFile.proxy?.password ? [envFile.proxy.password] : []),
   ];
-  await ensureOpAvailable(allEntries);
+  await ensureResolversAvailable(allEntries);
+
+  const secretProviders = envFile.secret_providers;
 
   for (const [key, entry] of secretEntries) {
     secretKeys.add(key);
-    const resolved = await resolveSecretEntry(entry, `secret "${key}"`);
+    const resolved = await resolveSecretEntry(entry, `secret "${key}"`, secretProviders);
     variables[key] = resolved;
     secretValues.add(resolved);
   }
@@ -122,10 +137,10 @@ export async function resolveEnvironment(
   if (envFile.proxy) {
     proxy = { server: envFile.proxy.server, bypass: envFile.proxy.bypass };
     if (envFile.proxy.username) {
-      proxy.username = await resolveSecretEntry(envFile.proxy.username, "proxy username");
+      proxy.username = await resolveSecretEntry(envFile.proxy.username, "proxy username", secretProviders);
     }
     if (envFile.proxy.password) {
-      const pw = await resolveSecretEntry(envFile.proxy.password, "proxy password");
+      const pw = await resolveSecretEntry(envFile.proxy.password, "proxy password", secretProviders);
       proxy.password = pw;
       secretValues.add(pw);
     }
@@ -175,6 +190,38 @@ export async function listEnvironments(): Promise<EnvironmentSummary[]> {
   }
 
   return results;
+}
+
+/**
+ * Validate secret entries using the resolver registry.
+ */
+function validateSecretEntries(
+  entries: [string, SecretEntry][],
+  labelPrefix: string,
+  issues: ValidationIssue[],
+  secretProviders?: Record<string, ProviderConfig>,
+): void {
+  for (const [key, entry] of entries) {
+    if (entry.type === "env") {
+      if (process.env[entry.value] === undefined) {
+        issues.push({
+          severity: "warning",
+          message: `${labelPrefix}"${key}": environment variable "${entry.value}" is not set`,
+        });
+      }
+    } else if (entry.type !== "literal") {
+      const resolver = getResolver(entry.type);
+      if (resolver) {
+        const entryIssues = resolver.validate(entry, secretProviders?.[entry.type]);
+        for (const issue of entryIssues) {
+          issues.push({
+            severity: issue.severity,
+            message: `${labelPrefix}"${key}": ${issue.message}`,
+          });
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -232,71 +279,52 @@ export async function validateEnvironment(
 
   const envFile = result.data;
 
-  // Collect all SecretEntry values for op CLI check
+  // Collect all SecretEntry values for CLI availability checks
   const allSecretEntries: SecretEntry[] = [
     ...Object.values(envFile.secrets ?? {}),
     ...(envFile.proxy?.username ? [envFile.proxy.username] : []),
     ...(envFile.proxy?.password ? [envFile.proxy.password] : []),
   ];
-  const hasOpEntries = allSecretEntries.some((e) => e.type === "op");
-  if (hasOpEntries) {
-    const opAvailable = await checkOpAvailable();
-    if (!opAvailable) {
-      issues.push({
-        severity: "warning",
-        message:
-          '1Password CLI (op) is not installed. Entries with type "op" will fail to resolve at execution time.',
-      });
+
+  // Check CLI availability for all external resolver types
+  const externalTypes = new Set(
+    allSecretEntries
+      .map((e) => e.type)
+      .filter((t) => t !== "literal" && t !== "env")
+  );
+  for (const type of externalTypes) {
+    const resolver = getResolver(type);
+    if (resolver) {
+      const available = await resolver.checkAvailable();
+      if (!available) {
+        issues.push({
+          severity: "warning",
+          message: `${resolver.cliName} is not installed. Entries with type "${type}" will fail to resolve at execution time.`,
+        });
+      }
     }
   }
 
-  // Check secrets resolution
+  // Check secrets
   if (envFile.secrets) {
-    for (const [key, entry] of Object.entries(envFile.secrets)) {
-      if (entry.type === "env") {
-        if (process.env[entry.value] === undefined) {
-          issues.push({
-            severity: "warning",
-            message: `Secret "${key}": environment variable "${entry.value}" is not set`,
-          });
-        }
-      }
-      if (entry.type === "op") {
-        if (!entry.value.startsWith("op://")) {
-          issues.push({
-            severity: "warning",
-            message: `Secret "${key}": value should be a secret reference starting with "op://" (got "${entry.value}")`,
-          });
-        }
-      }
-    }
+    validateSecretEntries(
+      Object.entries(envFile.secrets),
+      "Secret ",
+      issues,
+      envFile.secret_providers,
+    );
   }
 
   // Check proxy configuration
   if (envFile.proxy) {
-    const proxyEntries = [
-      { field: "username", entry: envFile.proxy.username },
-      { field: "password", entry: envFile.proxy.password },
-    ].filter((p): p is { field: string; entry: SecretEntry } => p.entry != null);
-
-    for (const { field, entry } of proxyEntries) {
-      if (entry.type === "env") {
-        if (process.env[entry.value] === undefined) {
-          issues.push({
-            severity: "warning",
-            message: `Proxy ${field}: environment variable "${entry.value}" is not set`,
-          });
-        }
-      }
-      if (entry.type === "op") {
-        if (!entry.value.startsWith("op://")) {
-          issues.push({
-            severity: "warning",
-            message: `Proxy ${field}: value should be a secret reference starting with "op://" (got "${entry.value}")`,
-          });
-        }
-      }
+    const proxyEntries: [string, SecretEntry][] = [];
+    if (envFile.proxy.username) {
+      proxyEntries.push(["username", envFile.proxy.username]);
     }
+    if (envFile.proxy.password) {
+      proxyEntries.push(["password", envFile.proxy.password]);
+    }
+    validateSecretEntries(proxyEntries, "Proxy ", issues, envFile.secret_providers);
   }
 
   // Check for variable/secret key conflicts
@@ -349,4 +377,3 @@ export async function saveEnvironment(
 
   return filePath;
 }
-
