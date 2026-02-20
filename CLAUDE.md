@@ -112,12 +112,13 @@ npx tsc --noEmit       # 型チェック
 
 - `create_qa_plan` - QA Plan 作成（プロジェクトは `X-Project-Key` ヘッダーで自動解決）。`git_branch` と `pull_request_url` を任意で指定可能（未指定時は `git rev-parse` / `gh pr view` で自動検出）
 - `get_qa_plan` - QA Plan 取得
-- `list_qa_plans` - QA Plan 一覧（プロジェクトは `X-Project-Key` ヘッダーで自動解決）。カーソルベースページネーション（`limit` / `cursor` パラメータ、`{ items, next_cursor }` レスポンス）
+- `list_qa_plans` - QA Plan 一覧（プロジェクトは `X-Project-Key` ヘッダーで自動解決）。`pinned` パラメータでピン留めフィルタ可能。カーソルベースページネーション（`limit` / `cursor` パラメータ、`{ items, next_cursor }` レスポンス）
 - `update_qa_plan` - QA Plan 更新（シナリオ・ステップの構造化データで新バージョン作成）。`name` は任意（バージョン番号はシステム自動管理）
 - `update_qa_plan_step` - 単一ステップの部分更新（新バージョンを作成。name はパッチ内容から自動生成）
 - `add_qa_plan_step` - シナリオにステップを追加（新バージョンを作成。name はパッチ内容から自動生成）
 - `remove_qa_plan_step` - ステップを削除（新バージョンを作成。name はパッチ内容から自動生成）
 - `set_qa_plan_status` - QA Plan ステータス変更
+- `pin_qa_plan` - QA Plan ピン留め/解除。`list_qa_plans` の `pinned` フィルタで素早くアクセス可能
 
 ### Execution ツール
 
