@@ -143,15 +143,20 @@ This creates an empty plan with no versions. A plan cannot be executed until a v
         .string()
         .optional()
         .describe("Filter by status: draft, active, archived"),
+      pinned: z
+        .boolean()
+        .optional()
+        .describe("Filter by pinned status. true = only pinned plans, false = only unpinned plans"),
       limit: z.number().optional().describe("Maximum number of results per page"),
       cursor: z
         .string()
         .optional()
         .describe("Cursor for pagination. Use next_cursor from previous response to get next page"),
     },
-    async ({ status, limit, cursor }) => {
+    async ({ status, pinned, limit, cursor }) => {
       const result = await client.listQAPlans({
         status,
+        pinned,
         limit,
         cursor,
       });
@@ -236,6 +241,26 @@ Key behaviors:
     },
     async ({ id, status }) => {
       const plan = await client.setQAPlanStatus(id, status);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(plan, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "pin_qa_plan",
+    "Pin or unpin a QA plan. Pinned plans can be quickly found using the pinned filter in list_qa_plans.",
+    {
+      id: z.string().describe("Plan ID"),
+      pinned: z.boolean().describe("true to pin, false to unpin"),
+    },
+    async ({ id, pinned }) => {
+      const plan = await client.setQAPlanPinned(id, pinned);
       return {
         content: [
           {

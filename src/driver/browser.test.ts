@@ -86,7 +86,7 @@ function makeStep(
     id: "s1",
     step_key: "test_step",
     action: "browser",
-    config: { steps },
+    config: { steps } as Step["config"],
     assertions: assertions as Step["assertions"],
     sort_order: 0,
   };

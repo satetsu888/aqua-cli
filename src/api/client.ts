@@ -6,6 +6,7 @@ export interface QAPlan {
   git_branch: string;
   pull_request_url: string;
   status: string;
+  pinned: boolean;
   url: string;
   created_by?: string;
   latest_version?: QAPlanVersion;
@@ -239,12 +240,14 @@ export class AquaClient {
   async listQAPlans(params?: {
     project_id?: string;
     status?: string;
+    pinned?: boolean;
     limit?: number;
     cursor?: string;
   }): Promise<{ items: QAPlan[]; next_cursor: string | null }> {
     const query = new URLSearchParams();
     if (params?.project_id) query.set("project_id", params.project_id);
     if (params?.status) query.set("status", params.status);
+    if (params?.pinned !== undefined) query.set("pinned", String(params.pinned));
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.cursor) query.set("cursor", params.cursor);
     const qs = query.toString();
@@ -267,6 +270,10 @@ export class AquaClient {
 
   async setQAPlanStatus(id: string, status: string): Promise<QAPlan> {
     return this.request<QAPlan>("PATCH", `/api/qa-plans/${id}/status`, { status });
+  }
+
+  async setQAPlanPinned(id: string, pinned: boolean): Promise<QAPlan> {
+    return this.request<QAPlan>("PATCH", `/api/qa-plans/${id}/pinned`, { pinned });
   }
 
   // QA Plan Versions
