@@ -161,15 +161,32 @@ Once the MCP server is running, the following tools are available to the AI agen
 | `add_qa_plan_step` | Add a step to a scenario (creates new version) |
 | `remove_qa_plan_step` | Remove a step (creates new version) |
 | `set_qa_plan_status` | Change plan status (draft / active / archived) |
+| `pin_qa_plan` | Pin/unpin a plan for quick access via `list_qa_plans` filtering |
 
 ### Execution
 
 | Tool | Description |
 |------|-------------|
 | `execute_qa_plan` | Execute a plan — runs all scenarios and records results |
-| `run_scenario` | Run a single scenario inline (no server recording, for quick iteration) |
+| `run_scenario` | Run a complete scenario definition in one call for batch validation (no server recording) |
 | `get_execution` | Get execution results with step details |
 | `list_executions` | List executions (filter by plan version or status) |
+| `get_execution_progress` | Get step-level progress of a running execution |
+
+### Exploration
+
+Interactive exploration session for discovering page structure, CSS selectors, and API response formats one action at a time. Use this before building scenarios when the target application's structure is unknown.
+
+| Tool | Description |
+|------|-------------|
+| `start_exploration` | Start an exploration session (browser stays alive between actions) |
+| `explore_action` | Execute a single browser action, HTTP request, or browser assertion and get immediate feedback |
+| `end_exploration` | End the session and clean up resources |
+
+**Exploration vs run_scenario:**
+
+- **`start_exploration` → `explore_action`**: Use when you *don't know* the page structure yet. Explore interactively — each browser action returns the full DOM HTML and a screenshot for discovering selectors.
+- **`run_scenario`**: Use when you *already have* a complete scenario definition and want to validate it works in a single call.
 
 ### Environment
 
@@ -188,6 +205,12 @@ Once the MCP server is running, the following tools are available to the AI agen
 | `list_common_scenarios` | List common scenarios in the project |
 | `update_common_scenario` | Update a common scenario |
 | `delete_common_scenario` | Delete a common scenario |
+
+### Setup
+
+| Tool | Description |
+|------|-------------|
+| `check_project_setup` | Check project setup status (config, memory, environments, common scenarios) |
 
 ### Recording
 

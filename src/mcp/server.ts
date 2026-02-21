@@ -12,6 +12,7 @@ import { registerCommonScenarioTools } from "./tools/common-scenario.js";
 import { registerSetupTools } from "./tools/setup.js";
 import { registerRecorderTools } from "./tools/recorder.js";
 import { registerProgressTools } from "./tools/progress.js";
+import { registerExplorationTools } from "./tools/exploration.js";
 
 export async function startMCPServer(
   serverURL: string,
@@ -131,11 +132,29 @@ Environment files support three secret resolution types:
 
 Environment files can include a proxy section to route HTTP requests and browser access through a proxy server. Configure server (proxy URL), bypass (comma-separated domains to skip), and optional username/password (using secret entry format). The proxy applies to both HTTP Driver (via undici ProxyAgent) and Browser Driver (via Playwright proxy option).
 
+## Interactive Exploration with start_exploration
+
+When you DON'T know the page structure, CSS selectors, or API response formats yet, use the exploration session to investigate interactively:
+
+1. start_exploration - Create an exploration session (optionally load environment variables)
+2. explore_action - Execute one action at a time (browser step, HTTP request, or browser assertion) and inspect the result
+3. end_exploration - Close the session when done
+
+Each browser action returns the full page DOM HTML (for discovering selectors), a screenshot, the current URL, and the page title. The browser stays alive between actions so you can build up state incrementally (navigate → click → type → inspect).
+
+Use exploration when you need to:
+- Discover which CSS selectors work for target elements
+- Understand page structure before writing scenarios
+- Inspect API response formats and values
+- Iteratively test actions with immediate feedback
+
 ## Quick Testing with run_scenario
 
-When you want to quickly test a single scenario without recording to the server, use run_scenario.
-This is useful during Step 2 (plan creation) or Step 5 (iteration) to validate individual scenarios before executing the full plan.
+When you ALREADY have a complete scenario definition and want to validate it works in a single call, use run_scenario.
+This executes all steps at once and returns structured pass/fail results — ideal for batch validation after you know the selectors and page flow.
 You can pass qa_plan_id to inherit the plan's default variables.
+
+Typical workflow: start_exploration (discover) → run_scenario (validate) → update_qa_plan (finalize)
 
 ## Browser Recording
 
@@ -164,6 +183,7 @@ Each project can store a memory document for accumulating project knowledge lear
   registerMemoryTools(server, client);
   registerRecorderTools(server);
   registerProgressTools(server, client);
+  registerExplorationTools(server, client);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

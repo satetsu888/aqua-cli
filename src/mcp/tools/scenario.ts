@@ -24,11 +24,15 @@ export function registerScenarioTools(
 ) {
   server.tool(
     "run_scenario",
-    `Execute a single scenario directly with inline config for quick testing and validation.
-Use this to verify individual scenarios work correctly before adding them to a QA plan.
+    `Execute a complete scenario definition in a single call for batch validation.
+Use this when you ALREADY have a fully-defined scenario (steps, selectors, assertions) and want to verify it works as a whole.
 
 This is a lightweight execution that does NOT record results to the server.
 For recorded executions, use execute_qa_plan instead.
+
+WHEN TO USE run_scenario vs start_exploration:
+- run_scenario: You already know the correct selectors and page flow. Validate the complete scenario in one call.
+- start_exploration: You DON'T know the page structure yet. Explore interactively one action at a time to discover selectors and API response formats first.
 
 Results include detailed information for debugging:
 - HTTP response bodies (truncated to 2000 chars)

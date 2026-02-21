@@ -528,6 +528,157 @@ describe("BrowserDriver iframe support", () => {
     });
   });
 
+  describe("executeSingleBrowserStep", () => {
+    it("executes a single browser step without resetting activeFrame", async () => {
+      const driver = await createDriver();
+
+      // First: switch to frame via execute (which resets activeFrame)
+      const step = makeStep([{ switch_to_frame: "iframe#payment" }]);
+      await driver.execute(step, {});
+
+      // executeSingleBrowserStep should NOT reset activeFrame
+      // so click should go to the frame
+      await driver.executeSingleBrowserStep({ click: ".frame-btn" });
+
+      expect(mockFrame.click).toHaveBeenCalledWith(".frame-btn");
+      expect(mockPage.click).not.toHaveBeenCalled();
+
+      await driver.close();
+    });
+
+    it("applies timeout when provided", async () => {
+      const driver = await createDriver();
+      await driver.executeSingleBrowserStep(
+        { goto: "http://example.com" },
+        5000
+      );
+
+      expect(mockPage.setDefaultTimeout).toHaveBeenCalledWith(5000);
+      expect(mockPage.setDefaultNavigationTimeout).toHaveBeenCalledWith(5000);
+      expect(mockPage.goto).toHaveBeenCalledWith("http://example.com", {
+        waitUntil: "domcontentloaded",
+      });
+
+      await driver.close();
+    });
+
+    it("propagates errors from the browser step", async () => {
+      mockPage.goto.mockRejectedValue(new Error("net::ERR_CONNECTION_REFUSED"));
+
+      const driver = await createDriver();
+
+      await expect(
+        driver.executeSingleBrowserStep({ goto: "http://unreachable" })
+      ).rejects.toThrow("net::ERR_CONNECTION_REFUSED");
+
+      await driver.close();
+    });
+  });
+
+  describe("getPageState", () => {
+    it("returns screenshot, DOM, URL, and title", async () => {
+      const driver = await createDriver();
+      // Initialize browser
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      mockPage.screenshot.mockResolvedValue(Buffer.from("screenshot-data"));
+      mockPage.content.mockResolvedValue("<html><body>test</body></html>");
+      mockPage.url.mockReturnValue("http://example.com/page");
+      mockPage.title.mockResolvedValue("Test Page");
+
+      const state = await driver.getPageState();
+
+      expect(state).not.toBeNull();
+      expect(state!.screenshot).toBeInstanceOf(Buffer);
+      expect(state!.dom).toBe("<html><body>test</body></html>");
+      expect(state!.url).toBe("http://example.com/page");
+      expect(state!.title).toBe("Test Page");
+
+      await driver.close();
+    });
+
+    it("returns null when browser is not initialized", async () => {
+      const driver = await createDriver();
+
+      const state = await driver.getPageState();
+
+      expect(state).toBeNull();
+
+      await driver.close();
+    });
+
+    it("returns null when page state capture fails", async () => {
+      const driver = await createDriver();
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      mockPage.screenshot.mockRejectedValue(new Error("Page closed"));
+
+      const state = await driver.getPageState();
+
+      expect(state).toBeNull();
+
+      await driver.close();
+    });
+  });
+
+  describe("evaluateSingleAssertion", () => {
+    it("evaluates element_visible assertion", async () => {
+      const mockElement = { isVisible: vi.fn().mockResolvedValue(true) };
+      mockPage.$.mockResolvedValue(mockElement);
+
+      const driver = await createDriver();
+      // Initialize browser
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      const result = await driver.evaluateSingleAssertion({
+        type: "element_visible",
+        selector: "#main",
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.type).toBe("element_visible");
+
+      await driver.close();
+    });
+
+    it("evaluates element_text assertion with contains", async () => {
+      const mockElement = {
+        textContent: vi.fn().mockResolvedValue("Hello World"),
+      };
+      mockPage.$.mockResolvedValue(mockElement);
+
+      const driver = await createDriver();
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      const result = await driver.evaluateSingleAssertion({
+        type: "element_text",
+        selector: "h1",
+        contains: "Hello",
+      });
+
+      expect(result.passed).toBe(true);
+
+      await driver.close();
+    });
+
+    it("evaluates url_contains assertion", async () => {
+      const driver = await createDriver();
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      mockPage.url.mockReturnValue("http://example.com/dashboard");
+
+      const result = await driver.evaluateSingleAssertion({
+        type: "url_contains",
+        expected: "/dashboard",
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.actual).toBe("http://example.com/dashboard");
+
+      await driver.close();
+    });
+  });
+
   describe("activeFrame reset between execute() calls", () => {
     it("resets to page at the start of each execute()", async () => {
       const driver = await createDriver();

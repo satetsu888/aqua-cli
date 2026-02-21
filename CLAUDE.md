@@ -26,6 +26,7 @@ cli/
 │   │       ├── qa-plan.ts     # QA Plan CRUD ツール（X-Project-Key ヘッダーで自動解決）
 │   │       ├── execution.ts   # 実行ツール
 │   │       ├── scenario.ts    # 単一シナリオ直接実行ツール（run_scenario）
+│   │       ├── exploration.ts # インタラクティブ探索セッション（start_exploration, explore_action, end_exploration）
 │   │       ├── common-scenario.ts # 共通シナリオ CRUD ツール
 │   │       ├── environment.ts # 環境設定ツール
 │   │       ├── memory.ts      # プロジェクトメモリツール
@@ -146,6 +147,12 @@ npx tsc --noEmit       # 型チェック
 
 - `get_project_memory` - プロジェクトメモリを取得（未設定時はテンプレートを返却）。QA プラン作成・実行を通じて蓄積された知識（アプリ構造、認証フロー、有効なセレクタ等）を確認
 - `save_project_memory` - プロジェクトメモリを保存（全体上書き）。実行で学んだ知見を記録
+
+### Exploration ツール
+
+- `start_exploration` - インタラクティブ探索セッションを開始。ページ構造やセレクタが不明な段階で、1アクションずつ実行して結果を確認しながら調査するために使用。`env_name` / `environment` / `qa_plan_id` で変数を事前ロード可能。セッションは60秒無操作でタイムアウト
+- `explore_action` - セッション内で単一アクションを実行。`browser_step`（ブラウザ操作→DOM全体+screenshot+URL+title を返却）、`http_request`（HTTPリクエスト→status+headers+body を返却、`extract` で値抽出可能）、`browser_assertion`（アサーション評価）のいずれかを指定。ブラウザはセッション間で起動したまま維持
+- `end_exploration` - 探索セッションを終了しリソースを解放
 
 ### Recorder ツール
 

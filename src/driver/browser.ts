@@ -2,6 +2,7 @@ import type { Browser, BrowserContext, Page, Frame } from "playwright";
 import type {
   Step,
   StepResult,
+  Assertion,
   BrowserConfig,
   BrowserStep,
   BrowserArtifact,
@@ -622,6 +623,65 @@ export class BrowserDriver {
         message: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Execute a single browser step for interactive exploration.
+   * Unlike execute(), this does NOT reset activeFrame between calls,
+   * preserving frame context across multiple exploration actions.
+   */
+  async executeSingleBrowserStep(
+    browserStep: BrowserStep,
+    timeoutMs?: number,
+  ): Promise<void> {
+    await this.ensureBrowser();
+
+    if (timeoutMs) {
+      this.page!.setDefaultTimeout(timeoutMs);
+      this.page!.setDefaultNavigationTimeout(timeoutMs);
+    }
+
+    const artifacts: BrowserArtifact[] = [];
+    await this.executeBrowserStep(browserStep, artifacts);
+  }
+
+  /**
+   * Get the current page state (screenshot, DOM, URL, title).
+   * Returns null if the browser is not initialized or state cannot be captured.
+   */
+  async getPageState(): Promise<{
+    screenshot: Buffer;
+    dom: string;
+    url: string;
+    title: string;
+  } | null> {
+    if (!this.page) return null;
+    try {
+      const screenshot = Buffer.from(await this.page.screenshot({ fullPage: true }));
+      const dom = await this.page.content();
+      const url = this.page.url();
+      const title = await this.page.title();
+      return { screenshot, dom, url, title };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Evaluate a single browser assertion for interactive exploration.
+   */
+  async evaluateSingleAssertion(assertion: Assertion): Promise<AssertionResultData> {
+    await this.ensureBrowser();
+    const syntheticStep: Step = {
+      id: "explore",
+      step_key: "explore",
+      action: "browser",
+      config: { steps: [] } as BrowserConfig,
+      assertions: [assertion],
+      sort_order: 0,
+    };
+    const results = await this.evaluateAssertions(syntheticStep);
+    return results[0] ?? { type: assertion.type, passed: false, message: "No result" };
   }
 
   async close(): Promise<void> {
