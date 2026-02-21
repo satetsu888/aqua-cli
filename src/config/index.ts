@@ -42,16 +42,11 @@ export function saveConfig(config: AquaConfig): void {
 
 /**
  * Resolve server URL with priority:
- * 1. CLI flag (explicit --server-url)
- * 2. Environment variable (AQUA_SERVER_URL)
- * 3. .aqua/config.json
- * 4. Default (http://localhost:8080)
+ * 1. Environment variable (AQUA_SERVER_URL)
+ * 2. .aqua/config.json
+ * 3. Default
  */
-export function resolveServerURL(cliFlag?: string): string {
-  if (cliFlag) {
-    return cliFlag;
-  }
-
+export function resolveServerURL(): string {
   const envURL = process.env.AQUA_SERVER_URL;
   if (envURL) {
     return envURL;

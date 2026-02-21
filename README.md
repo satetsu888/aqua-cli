@@ -79,7 +79,7 @@ aqua-cli login [--server-url <url>] [--force]
 Remove saved credentials for the server.
 
 ```bash
-aqua-cli logout [--server-url <url>]
+aqua-cli logout
 ```
 
 ### `aqua-cli init`
@@ -95,7 +95,7 @@ aqua-cli init [--server-url <url>]
 Show the currently authenticated user.
 
 ```bash
-aqua-cli whoami [--server-url <url>]
+aqua-cli whoami
 ```
 
 ### `aqua-cli execute`
@@ -127,7 +127,7 @@ The output can be used directly with `update_qa_plan`, `create_common_scenario`,
 Open the web UI in your browser (requires login).
 
 ```bash
-aqua-cli web [--server-url <url>]
+aqua-cli web
 ```
 
 ### `aqua-cli mcp-server`
@@ -135,15 +135,14 @@ aqua-cli web [--server-url <url>]
 Start the MCP server for AI agent integration.
 
 ```bash
-aqua-cli mcp-server [--server-url <url>]
+aqua-cli mcp-server
 ```
 
 Server URL is resolved in this order:
 
-1. `--server-url` flag
-2. `AQUA_SERVER_URL` environment variable
-3. `.aqua/config.json`
-4. Default (`http://localhost:9080`)
+1. `AQUA_SERVER_URL` environment variable
+2. `.aqua/config.json`
+3. Default (`http://localhost:9080`)
 
 ## MCP Tools
 

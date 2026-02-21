@@ -109,14 +109,13 @@ interface RunExecuteOptions {
   env?: string;
   planVersion?: number;
   var?: Record<string, string>;
-  serverUrl?: string;
 }
 
 export async function runExecute(
   qaPlanId: string,
   opts: RunExecuteOptions
 ): Promise<void> {
-  const serverUrl = resolveServerURL(opts.serverUrl);
+  const serverUrl = resolveServerURL();
   const credential = getCredential(serverUrl);
   if (!credential) {
     console.error("Not logged in. Run `aqua-cli login` first.");

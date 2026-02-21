@@ -35,9 +35,8 @@ program
 program
   .command("logout")
   .description("Remove saved credentials for the server")
-  .option("--server-url <url>", "Backend server URL", DEFAULT_SERVER_URL)
-  .action(async (opts: { serverUrl: string }) => {
-    const url = opts.serverUrl;
+  .action(async () => {
+    const url = resolveServerURL();
     const existing = getCredential(url);
     if (!existing) {
       console.log(`Not logged in to ${url}`);
@@ -60,9 +59,8 @@ program
 program
   .command("whoami")
   .description("Show the currently authenticated user")
-  .option("--server-url <url>", "Backend server URL", DEFAULT_SERVER_URL)
-  .action(async (opts: { serverUrl: string }) => {
-    const url = opts.serverUrl;
+  .action(async () => {
+    const url = resolveServerURL();
     const credential = getCredential(url);
     if (!credential) {
       console.error("Not logged in. Run `aqua-cli login` first.");
@@ -111,7 +109,6 @@ program
     collectVars,
     {}
   )
-  .option("--server-url <url>", "Backend server URL")
   .action(
     async (
       qaPlanId: string,
@@ -119,7 +116,6 @@ program
         env?: string;
         planVersion?: number;
         var?: Record<string, string>;
-        serverUrl?: string;
       }
     ) => {
       await runExecute(qaPlanId, opts);
@@ -138,9 +134,8 @@ program
 program
   .command("web")
   .description("Open the web UI in your browser (requires login)")
-  .option("--server-url <url>", "Backend server URL", DEFAULT_SERVER_URL)
-  .action(async (opts: { serverUrl: string }) => {
-    const url = opts.serverUrl;
+  .action(async () => {
+    const url = resolveServerURL();
     const credential = getCredential(url);
     if (!credential) {
       console.error(
@@ -177,9 +172,8 @@ program
 program
   .command("mcp-server")
   .description("Start the MCP server for AI agent integration")
-  .option("--server-url <url>", "Backend server URL")
-  .action(async (opts: { serverUrl?: string }) => {
-    const serverURL = resolveServerURL(opts.serverUrl);
+  .action(async () => {
+    const serverURL = resolveServerURL();
     const credential = getCredential(serverURL);
     const config = loadConfig();
     await startMCPServer(serverURL, credential?.api_key, config);

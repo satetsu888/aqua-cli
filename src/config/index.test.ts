@@ -79,11 +79,7 @@ describe("resolveServerURL", () => {
     vi.mocked(fs.readFileSync).mockReset();
   });
 
-  it("returns CLI flag when provided", () => {
-    expect(resolveServerURL("http://custom:8080")).toBe("http://custom:8080");
-  });
-
-  it("returns environment variable when CLI flag is absent", () => {
+  it("returns environment variable when set", () => {
     process.env.AQUA_SERVER_URL = "http://env-server:9090";
     expect(resolveServerURL()).toBe("http://env-server:9090");
   });
