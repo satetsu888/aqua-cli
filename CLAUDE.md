@@ -80,7 +80,87 @@ cli/
 
 ```bash
 npm run build          # tsup ビルド
+npm test               # vitest run（全テスト実行）
 npx tsc --noEmit       # 型チェック
+```
+
+## テスト
+
+Vitest を使用。全テストはユニットテストで、外部依存はすべてモック化されている。
+
+### ファイル配置・命名
+
+ソースファイルと同じディレクトリに `*.test.ts` で配置（co-located）。共有テストヘルパーディレクトリはなく、各テストファイル内にファクトリ関数やモックヘルパーを定義する。
+
+### 設定
+
+`vitest.config.ts` で `globals: true`、`environment: "node"` を指定。`tsconfig.json` の `types` に `vitest/globals` を含む。
+
+### テスト構造
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+```
+
+- `describe` でテスト対象の関数・クラス単位にグルーピング。ネスト可
+- `beforeEach` でモックを `.mockReset()` してテスト間の分離を確保
+- `it` の記述は `"returns X when Y"` / `"creates X with Y"` のような結果ベースの命名
+
+### モックパターン
+
+**モジュールモック（`vi.mock()`）** - ファイルトップレベルで宣言。対象モジュールの関数を `vi.fn()` で差し替え:
+
+```typescript
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+}));
+```
+
+**グローバルモック（`vi.stubGlobal()`）** - `fetch` などグローバル関数の差し替え:
+
+```typescript
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+```
+
+**型付きモック呼び出し** - `vi.mocked()` でモック関数として型安全にアクセス:
+
+```typescript
+vi.mocked(fs.existsSync).mockReturnValue(true);
+```
+
+### ファクトリ関数パターン
+
+テストデータ生成にはテストファイル内にファクトリ関数を定義し、`overrides` で部分上書きできるようにする:
+
+```typescript
+function httpStep(overrides: Partial<Step> = {}): Step {
+  return {
+    id: "server-id-1",
+    step_key: "test-step",
+    action: "http_request",
+    config: { method: "GET", url: "http://example.com/api" },
+    sort_order: 0,
+    ...overrides,
+  } as Step;
+}
+```
+
+### MCP ツールのテストパターン
+
+`createMockServer()` でツール登録をキャプチャし、`getHandler(name)` でハンドラを取得してテスト:
+
+```typescript
+function createMockServer() {
+  const tools = new Map<string, ToolCallback>();
+  return {
+    tool: vi.fn((name, _desc, _schema, handler) => {
+      tools.set(name, handler);
+    }),
+    getHandler: (name: string) => tools.get(name)!,
+  };
+}
 ```
 
 ## CLI コマンド
