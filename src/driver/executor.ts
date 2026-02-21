@@ -19,6 +19,7 @@ export interface ExecutionSummary {
   skipped: number;
   results: StepResult[];
   resolvedVariables: Record<string, string>;
+  recorded: boolean;
 }
 
 export interface StepCompleteEvent {
@@ -48,7 +49,10 @@ export class QAPlanExecutor {
     envName?: string,
     onExecutionCreated?: (executionId: string, executionUrl: string) => void,
     onStepComplete?: OnStepCompleteCallback,
+    skipRecording?: boolean,
   ): Promise<ExecutionSummary> {
+    const recording = !skipRecording;
+
     // Check browser dependencies before creating execution record
     const hasBrowserSteps = plan.scenarios.some((s) =>
       s.steps.some((step) => step.action === "browser")
@@ -92,29 +96,35 @@ export class QAPlanExecutor {
       variables: masker.mask("environment", layer.variables) as Record<string, string>,
     }));
 
-    // Mask proxy config before sending to server
-    let maskedProxy: ProxyConfig | undefined;
-    if (proxyConfig) {
-      maskedProxy = {
-        server: proxyConfig.server,
-        bypass: proxyConfig.bypass,
-        username: proxyConfig.username ? "***" : undefined,
-        password: proxyConfig.password ? "***" : undefined,
-      };
+    let executionId = "(not recorded)";
+    let executionUrl = "";
+
+    if (recording) {
+      // Mask proxy config before sending to server
+      let maskedProxy: ProxyConfig | undefined;
+      if (proxyConfig) {
+        maskedProxy = {
+          server: proxyConfig.server,
+          bypass: proxyConfig.bypass,
+          username: proxyConfig.username ? "***" : undefined,
+          password: proxyConfig.password ? "***" : undefined,
+        };
+      }
+
+      // Create execution on server
+      const execution = await this.client.createExecution({
+        qa_plan_version_id: planVersionId,
+        environment: maskedLayers.length > 0 || maskedProxy
+          ? { layers: maskedLayers, proxy: maskedProxy }
+          : undefined,
+      });
+      executionId = execution.id;
+      executionUrl = execution.url;
+      onExecutionCreated?.(executionId, executionUrl);
+
+      // Start execution
+      await this.client.updateExecution(executionId, { status: "running" });
     }
-
-    // Create execution on server
-    const execution = await this.client.createExecution({
-      qa_plan_version_id: planVersionId,
-      environment: maskedLayers.length > 0 || maskedProxy
-        ? { layers: maskedLayers, proxy: maskedProxy }
-        : undefined,
-    });
-    const executionId = execution.id;
-    onExecutionCreated?.(executionId, execution.url);
-
-    // Start execution
-    await this.client.updateExecution(executionId, { status: "running" });
 
     const allResults: StepResult[] = [];
     let hasFailure = false;
@@ -150,6 +160,7 @@ export class QAPlanExecutor {
             });
             completedStepIndex++;
           },
+          recording,
         );
         allResults.push(...scenarioResult.results);
         browserStorageState = scenarioResult.browserStorageState ?? browserStorageState;
@@ -165,7 +176,10 @@ export class QAPlanExecutor {
         : hasFailure
           ? "failed"
           : "completed";
-      await this.client.updateExecution(executionId, { status: finalStatus });
+
+      if (recording) {
+        await this.client.updateExecution(executionId, { status: finalStatus });
+      }
 
       // Compute masked resolved variables for summary
       const maskedResolvedVariables: Record<string, string> = {};
@@ -173,9 +187,11 @@ export class QAPlanExecutor {
         Object.assign(maskedResolvedVariables, layer.variables);
       }
 
-      return this.buildSummary(executionId, execution.url, finalStatus, allResults, maskedResolvedVariables);
+      return this.buildSummary(executionId, executionUrl, finalStatus, allResults, maskedResolvedVariables, recording);
     } catch (err) {
-      await this.client.updateExecution(executionId, { status: "error" });
+      if (recording) {
+        await this.client.updateExecution(executionId, { status: "error" });
+      }
       throw err;
     }
   }
@@ -190,6 +206,7 @@ export class QAPlanExecutor {
     proxyConfig?: ResolvedProxyConfig,
     browserStorageState?: BrowserStorageState,
     onStepComplete?: (event: Omit<StepCompleteEvent, "index" | "totalSteps">) => void,
+    recording = true,
   ): Promise<{ results: StepResult[]; browserStorageState?: BrowserStorageState }> {
     const results: StepResult[] = [];
 
@@ -208,7 +225,9 @@ export class QAPlanExecutor {
             startedAt: new Date(),
             finishedAt: new Date(),
           };
-          await this.reportStep(executionId, scenario.name, step, skippedResult);
+          if (recording) {
+            await this.reportStep(executionId, scenario.name, step, skippedResult);
+          }
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
           onStepComplete?.({
@@ -251,7 +270,9 @@ export class QAPlanExecutor {
             finishedAt: new Date(),
           };
 
-          await this.reportStep(executionId, scenario.name, step, skippedResult);
+          if (recording) {
+            await this.reportStep(executionId, scenario.name, step, skippedResult);
+          }
           results.push(skippedResult);
           completedSteps.set(step.step_key, skippedResult);
           onStepComplete?.({
@@ -267,14 +288,18 @@ export class QAPlanExecutor {
         // Expand variables in step config
         const expandedStep = expandObject(step, variables);
 
-        // Report step start
-        const stepExec = await this.client.createStepExecution(executionId, {
-          scenario_name: scenario.name,
-          step_key: step.step_key,
-          action: step.action,
-          status: "running",
-          step_definition_id: step.id,
-        });
+        // Report step start (only when recording)
+        let stepExecId: string | undefined;
+        if (recording) {
+          const stepExec = await this.client.createStepExecution(executionId, {
+            scenario_name: scenario.name,
+            step_key: step.step_key,
+            action: step.action,
+            status: "running",
+            step_definition_id: step.id,
+          });
+          stepExecId = stepExec.id;
+        }
 
         // Execute
         let result: StepResult;
@@ -304,14 +329,16 @@ export class QAPlanExecutor {
           Object.assign(variables, result.extractedValues);
         }
 
-        // Upload artifacts and report assertion results
-        await this.reportArtifactsAndAssertions(stepExec.id, result, expandedStep, masker);
+        // Upload artifacts and report assertion results (only when recording)
+        if (recording && stepExecId) {
+          await this.reportArtifactsAndAssertions(stepExecId, result, expandedStep, masker);
 
-        // Report step result
-        await this.client.updateStepExecution(executionId, stepExec.id, {
-          status: result.status,
-          error_message: result.errorMessage,
-        });
+          // Report step result
+          await this.client.updateStepExecution(executionId, stepExecId, {
+            status: result.status,
+            error_message: result.errorMessage,
+          });
+        }
 
         results.push(result);
         completedSteps.set(step.step_key, result);
@@ -337,7 +364,9 @@ export class QAPlanExecutor {
               startedAt: new Date(),
               finishedAt: new Date(),
             };
-            await this.reportStep(executionId, scenario.name, remaining, skippedResult);
+            if (recording) {
+              await this.reportStep(executionId, scenario.name, remaining, skippedResult);
+            }
             results.push(skippedResult);
             completedSteps.set(remaining.step_key, skippedResult);
             onStepComplete?.({
@@ -486,7 +515,8 @@ export class QAPlanExecutor {
     executionUrl: string,
     status: "completed" | "failed" | "error",
     results: StepResult[],
-    resolvedVariables: Record<string, string>
+    resolvedVariables: Record<string, string>,
+    recorded: boolean,
   ): ExecutionSummary {
     return {
       executionId,
@@ -499,6 +529,7 @@ export class QAPlanExecutor {
       skipped: results.filter((r) => r.status === "skipped").length,
       results,
       resolvedVariables,
+      recorded,
     };
   }
 }

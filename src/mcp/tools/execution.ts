@@ -63,7 +63,14 @@ function formatExecutionResult(
   }
 
   // Add execution URL
-  lines.push(`**URL:** ${summary.executionUrl}`);
+  if (summary.executionUrl) {
+    lines.push(`**URL:** ${summary.executionUrl}`);
+  }
+
+  if (!summary.recorded) {
+    lines.push(``);
+    lines.push(`**Warning:** Results were not saved to the server (quota exceeded).`);
+  }
 
   return lines.join("\n");
 }

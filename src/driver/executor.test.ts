@@ -1244,4 +1244,100 @@ describe("QAPlanExecutor", () => {
       expect(summary.skipped).toBe(0);
     });
   });
+
+  describe("skipRecording", () => {
+    it("skips all server API calls when skipRecording is true", async () => {
+      const headers = new Map([["content-type", "application/json"]]);
+      mockFetch.mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve('{"ok":true}'),
+        headers: {
+          forEach: (cb: (v: string, k: string) => void) =>
+            headers.forEach((v, k) => cb(v, k)),
+        },
+      });
+
+      const client = createMockClient();
+      const executor = new QAPlanExecutor(client);
+      const summary = await executor.execute(
+        minimalPlan, "pv1", undefined, undefined, undefined, undefined, undefined, true
+      );
+
+      expect(summary.status).toBe("completed");
+      expect(summary.recorded).toBe(false);
+      expect(summary.executionId).toBe("(not recorded)");
+      expect(summary.executionUrl).toBe("");
+
+      // No server API calls should have been made
+      expect(client.createExecution).not.toHaveBeenCalled();
+      expect(client.updateExecution).not.toHaveBeenCalled();
+      expect(client.createStepExecution).not.toHaveBeenCalled();
+      expect(client.updateStepExecution).not.toHaveBeenCalled();
+      expect(client.uploadArtifact).not.toHaveBeenCalled();
+      expect(client.createAssertionResults).not.toHaveBeenCalled();
+    });
+
+    it("still executes test steps when skipRecording is true", async () => {
+      const headers = new Map([["content-type", "application/json"]]);
+      mockFetch.mockResolvedValue({
+        status: 500,
+        text: () => Promise.resolve("Server Error"),
+        headers: {
+          forEach: (cb: (v: string, k: string) => void) =>
+            headers.forEach((v, k) => cb(v, k)),
+        },
+      });
+
+      const client = createMockClient();
+      const executor = new QAPlanExecutor(client);
+      const summary = await executor.execute(
+        minimalPlan, "pv1", undefined, undefined, undefined, undefined, undefined, true
+      );
+
+      // Test should still run and detect the failure
+      expect(summary.totalSteps).toBe(1);
+      expect(summary.recorded).toBe(false);
+    });
+
+    it("records to server when skipRecording is false", async () => {
+      const headers = new Map([["content-type", "application/json"]]);
+      mockFetch.mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve('{"ok":true}'),
+        headers: {
+          forEach: (cb: (v: string, k: string) => void) =>
+            headers.forEach((v, k) => cb(v, k)),
+        },
+      });
+
+      const client = createMockClient();
+      const executor = new QAPlanExecutor(client);
+      const summary = await executor.execute(
+        minimalPlan, "pv1", undefined, undefined, undefined, undefined, undefined, false
+      );
+
+      expect(summary.recorded).toBe(true);
+      expect(client.createExecution).toHaveBeenCalled();
+      expect(client.updateExecution).toHaveBeenCalled();
+      expect(client.createStepExecution).toHaveBeenCalled();
+    });
+
+    it("sets recorded to true by default", async () => {
+      const headers = new Map([["content-type", "application/json"]]);
+      mockFetch.mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve('{"ok":true}'),
+        headers: {
+          forEach: (cb: (v: string, k: string) => void) =>
+            headers.forEach((v, k) => cb(v, k)),
+        },
+      });
+
+      const client = createMockClient();
+      const executor = new QAPlanExecutor(client);
+      const summary = await executor.execute(minimalPlan, "pv1");
+
+      expect(summary.recorded).toBe(true);
+    });
+  });
 });

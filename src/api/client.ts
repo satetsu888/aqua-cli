@@ -85,6 +85,17 @@ export interface EnvironmentResolution {
   proxy?: ProxyConfig;
 }
 
+export interface QuotaStatusEntry {
+  exceeded: boolean;
+  used: number;
+  limit: number; // -1 = unlimited
+}
+
+export interface QuotaStatus {
+  execution: QuotaStatusEntry;
+  storage: QuotaStatusEntry;
+}
+
 export interface Execution {
   id: string;
   qa_plan_version_id: string;
@@ -347,6 +358,11 @@ export class AquaClient {
       "GET",
       `/api/qa-plans/${qaPlanId}/versions/${version}/scenarios`
     );
+  }
+
+  // Quota
+  async getQuotaStatus(): Promise<QuotaStatus> {
+    return this.request<QuotaStatus>("GET", "/api/quota/status");
   }
 
   // Executions

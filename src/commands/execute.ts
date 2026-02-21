@@ -83,9 +83,24 @@ export async function executeQAPlan(
     resolvedEnv = await loadEnvironment(envName, requiredKeys);
   }
 
+  // Pre-check quota status to determine if recording should be skipped
+  let skipRecording = false;
+  try {
+    const quotaStatus = await client.getQuotaStatus();
+    if (quotaStatus.execution.exceeded || quotaStatus.storage.exceeded) {
+      skipRecording = true;
+      process.stderr.write(
+        "\nWarning: Quota exceeded. Test results will not be saved to the server.\n\n"
+      );
+    }
+  } catch {
+    // Pre-check failure is non-critical; fall back to normal recording.
+    // The server's 402 enforcement acts as a safety net.
+  }
+
   // Execute
   const executor = new QAPlanExecutor(client);
-  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated, opts.onStepComplete);
+  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated, opts.onStepComplete, skipRecording);
 }
 
 // --- CLI command handler ---
@@ -213,4 +228,9 @@ function printResult(summary: ExecutionSummary): void {
       : dim(`${summary.skipped} skipped`),
   ];
   console.log(`Steps: ${parts.join(", ")}`);
+
+  if (!summary.recorded) {
+    console.log("");
+    console.log(yellow("Warning: Results were not saved to the server (quota exceeded)."));
+  }
 }
