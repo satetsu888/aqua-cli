@@ -67,9 +67,26 @@ export async function runInit(opts: InitOptions): Promise<void> {
     console.log(`\nConfiguration saved to .aqua/config.json`);
     console.log(`  server_url:  ${url}`);
     console.log(`  project_key: ${projectKey}`);
-    console.log(
-      `\nThe project will be automatically created or resolved when the MCP server starts.`
-    );
+
+    // Register project on server
+    const projectClient = new AquaClient(url, credential.api_key, projectKey);
+    try {
+      const result = await projectClient.resolveProject();
+      if (result.created) {
+        console.log(`\nProject registered on server (newly created).`);
+      } else {
+        console.log(`\nProject resolved on server (already exists).`);
+      }
+      console.log(`  Project ID:   ${result.project.id}`);
+      console.log(`  Project name: ${result.project.name}`);
+    } catch (err) {
+      console.error(
+        `\nWarning: Failed to register project on server. It will be auto-created when the MCP server starts.`
+      );
+      if (err instanceof Error) {
+        console.error(`  ${err.message}`);
+      }
+    }
   } finally {
     closePrompts();
   }
