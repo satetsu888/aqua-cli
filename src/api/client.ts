@@ -146,7 +146,6 @@ export interface AssertionResult {
 export interface Organization {
   id: string;
   name: string;
-  slug: string;
   is_personal: boolean;
   role?: string;
   created_at: string;
@@ -540,7 +539,6 @@ export class AquaClient {
 
   async createOrganization(params: {
     name: string;
-    slug: string;
   }): Promise<Organization> {
     return this.request<Organization>("POST", "/api/organizations", params);
   }
