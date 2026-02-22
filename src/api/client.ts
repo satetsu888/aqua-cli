@@ -252,6 +252,7 @@ export class AquaClient {
     project_id?: string;
     status?: string;
     pinned?: boolean;
+    include_archived?: boolean;
     limit?: number;
     cursor?: string;
   }): Promise<{ items: QAPlan[]; next_cursor: string | null }> {
@@ -259,6 +260,7 @@ export class AquaClient {
     if (params?.project_id) query.set("project_id", params.project_id);
     if (params?.status) query.set("status", params.status);
     if (params?.pinned !== undefined) query.set("pinned", String(params.pinned));
+    if (params?.include_archived) query.set("include_archived", "true");
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.cursor) query.set("cursor", params.cursor);
     const qs = query.toString();
@@ -279,12 +281,11 @@ export class AquaClient {
     return this.request<void>("DELETE", `/api/qa-plans/${id}`);
   }
 
-  async setQAPlanStatus(id: string, status: string): Promise<QAPlan> {
-    return this.request<QAPlan>("PATCH", `/api/qa-plans/${id}/status`, { status });
-  }
-
-  async setQAPlanPinned(id: string, pinned: boolean): Promise<QAPlan> {
-    return this.request<QAPlan>("PATCH", `/api/qa-plans/${id}/pinned`, { pinned });
+  async patchQAPlanState(
+    id: string,
+    data: { status?: string; pinned?: boolean; archived?: boolean }
+  ): Promise<QAPlan> {
+    return this.request<QAPlan>("PATCH", `/api/qa-plans/${id}`, data);
   }
 
   // QA Plan Versions

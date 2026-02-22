@@ -36,7 +36,7 @@ function createMockClient() {
     listQAPlans: vi.fn(),
     createQAPlanVersion: vi.fn(),
     patchQAPlanVersion: vi.fn(),
-    setQAPlanStatus: vi.fn(),
+    patchQAPlanState: vi.fn(),
   };
 }
 
@@ -94,6 +94,8 @@ describe("plan tools", () => {
 
       expect(client.listQAPlans).toHaveBeenCalledWith({
         status: undefined,
+        pinned: undefined,
+        include_archived: undefined,
         limit: undefined,
         cursor: undefined,
       });
@@ -197,22 +199,47 @@ describe("plan tools", () => {
     });
   });
 
-  describe("set_qa_plan_status", () => {
+  describe("set_qa_plan_state", () => {
     it("changes plan status", async () => {
       registerQAPlanTools(server as never, client as unknown as AquaClient);
-      client.setQAPlanStatus.mockResolvedValue({
+      client.patchQAPlanState.mockResolvedValue({
         id: "p1",
-        status: "archived",
+        status: "active",
       });
 
-      const result = await server.getHandler("set_qa_plan_status")({
+      const result = await server.getHandler("set_qa_plan_state")({
         id: "p1",
-        status: "archived",
+        status: "active",
       });
 
-      expect(client.setQAPlanStatus).toHaveBeenCalledWith("p1", "archived");
+      expect(client.patchQAPlanState).toHaveBeenCalledWith("p1", {
+        status: "active",
+        pinned: undefined,
+        archived: undefined,
+      });
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.status).toBe("archived");
+      expect(parsed.status).toBe("active");
+    });
+
+    it("archives a plan", async () => {
+      registerQAPlanTools(server as never, client as unknown as AquaClient);
+      client.patchQAPlanState.mockResolvedValue({
+        id: "p1",
+        archived: true,
+      });
+
+      const result = await server.getHandler("set_qa_plan_state")({
+        id: "p1",
+        archived: true,
+      });
+
+      expect(client.patchQAPlanState).toHaveBeenCalledWith("p1", {
+        status: undefined,
+        pinned: undefined,
+        archived: true,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.archived).toBe(true);
     });
   });
 

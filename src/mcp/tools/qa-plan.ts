@@ -142,21 +142,26 @@ This creates an empty plan with no versions. A plan cannot be executed until a v
       status: z
         .string()
         .optional()
-        .describe("Filter by status: draft, active, archived"),
+        .describe("Filter by status: draft, active"),
       pinned: z
         .boolean()
         .optional()
         .describe("Filter by pinned status. true = only pinned plans, false = only unpinned plans"),
+      include_archived: z
+        .boolean()
+        .optional()
+        .describe("Include archived plans in results. Default: false (archived plans are hidden)"),
       limit: z.number().optional().describe("Maximum number of results per page"),
       cursor: z
         .string()
         .optional()
         .describe("Cursor for pagination. Use next_cursor from previous response to get next page"),
     },
-    async ({ status, pinned, limit, cursor }) => {
+    async ({ status, pinned, include_archived, limit, cursor }) => {
       const result = await client.listQAPlans({
         status,
         pinned,
+        include_archived,
         limit,
         cursor,
       });
@@ -231,36 +236,25 @@ Key behaviors:
   );
 
   server.tool(
-    "set_qa_plan_status",
-    "Change the status of a QA plan. Statuses: draft (initial, editable), active (approved for use), archived (no longer in use). Note: when an execution completes with all steps passed, the plan automatically transitions from draft to active.",
+    "set_qa_plan_state",
+    "Update the state of a QA plan (status, pinned, archived). At least one field is required. Statuses: draft (initial, editable), active (approved for use). Archived plans cannot be executed or have new versions created - unarchive first. Note: when an execution completes with all steps passed, the plan automatically transitions from draft to active.",
     {
       id: z.string().describe("Plan ID"),
       status: z
         .string()
-        .describe("New status: draft, active, archived"),
+        .optional()
+        .describe("New status: draft, active"),
+      pinned: z
+        .boolean()
+        .optional()
+        .describe("true to pin, false to unpin"),
+      archived: z
+        .boolean()
+        .optional()
+        .describe("true to archive, false to unarchive"),
     },
-    async ({ id, status }) => {
-      const plan = await client.setQAPlanStatus(id, status);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(plan, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  server.tool(
-    "pin_qa_plan",
-    "Pin or unpin a QA plan. Pinned plans can be quickly found using the pinned filter in list_qa_plans.",
-    {
-      id: z.string().describe("Plan ID"),
-      pinned: z.boolean().describe("true to pin, false to unpin"),
-    },
-    async ({ id, pinned }) => {
-      const plan = await client.setQAPlanPinned(id, pinned);
+    async ({ id, status, pinned, archived }) => {
+      const plan = await client.patchQAPlanState(id, { status, pinned, archived });
       return {
         content: [
           {
