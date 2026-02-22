@@ -177,21 +177,19 @@ Secrets are masked in the response for safety.`,
         };
       }
 
-      // Format result as markdown
-      const text = formatResult(scenario.name, result, masker);
-
-      return {
-        content: [{ type: "text" as const, text }],
-      };
+      // Format result
+      return { content: formatResultContent(scenario.name, result, masker) };
     }
   );
 }
 
-function formatResult(
+type ContentBlock = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+function formatResultContent(
   scenarioName: string,
   result: import("../../driver/scenario-runner.js").ScenarioRunResult,
   masker: Masker,
-): string {
+): ContentBlock[] {
   const lines: string[] = [
     `# Scenario Result: ${scenarioName}`,
     ``,
@@ -253,18 +251,6 @@ function formatResult(
       }
     }
 
-    // Browser artifacts (local file paths)
-    if (stepResult.browserArtifacts && stepResult.browserArtifacts.length > 0 && result.artifactDir) {
-      const screenshots = stepResult.browserArtifacts.filter((a) => a.type === "screenshot");
-      if (screenshots.length > 0) {
-        lines.push(`### Screenshots`);
-        for (const artifact of screenshots) {
-          const filename = `${stepResult.stepKey}_${artifact.name}.png`;
-          lines.push(`- ${result.artifactDir}/${filename}`);
-        }
-      }
-    }
-
     lines.push(``);
   }
 
@@ -277,5 +263,24 @@ function formatResult(
     }
   }
 
-  return lines.join("\n");
+  const content: ContentBlock[] = [
+    { type: "text" as const, text: lines.join("\n") },
+  ];
+
+  // Collect screenshots as inline image content
+  for (const stepResult of result.results) {
+    if (stepResult.browserArtifacts) {
+      for (const artifact of stepResult.browserArtifacts) {
+        if (artifact.type === "screenshot") {
+          content.push({
+            type: "image" as const,
+            data: artifact.data.toString("base64"),
+            mimeType: "image/png",
+          });
+        }
+      }
+    }
+  }
+
+  return content;
 }

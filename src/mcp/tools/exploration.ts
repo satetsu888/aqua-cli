@@ -1,9 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { AquaClient } from "../../api/client.js";
 import { BrowserDriver } from "../../driver/browser.js";
 import { HttpDriver } from "../../driver/http.js";
@@ -29,7 +26,6 @@ interface ExplorationSession {
   variables: Record<string, string>;
   masker: Masker;
   proxyConfig?: ResolvedProxyConfig;
-  artifactDir: string;
   lastActivityAt: number;
   timeoutTimer: ReturnType<typeof setTimeout>;
 }
@@ -160,9 +156,6 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
       };
       const masker = new Masker(maskCtx);
 
-      // Create artifact directory
-      const artifactDir = await mkdtemp(join(tmpdir(), "aqua-explore-"));
-
       // Create session
       const sessionId = randomUUID();
       const session: ExplorationSession = {
@@ -172,7 +165,6 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
         variables,
         masker,
         proxyConfig: resolvedEnv?.proxy,
-        artifactDir,
         lastActivityAt: Date.now(),
         timeoutTimer: setTimeout(
           () => cleanupSession(sessionId),
@@ -190,7 +182,6 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
               `Exploration session started.\n\n` +
               `**Session ID:** ${sessionId}\n` +
               `**Variables loaded:** ${varCount}\n` +
-              `**Artifact directory:** ${artifactDir}\n` +
               `**Session timeout:** ${SESSION_TIMEOUT_MS / 1000}s (resets on each action)\n\n` +
               `Use explore_action to execute browser actions, HTTP requests, or browser assertions.\n` +
               `Use end_exploration to close the session when done.`,
@@ -329,14 +320,13 @@ If you forget, the session will auto-expire after 60 seconds of inactivity.`,
         };
       }
 
-      const artifactDir = session.artifactDir;
       await cleanupSession(session_id);
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Exploration session ended.\n\nArtifacts saved in: ${artifactDir}`,
+            text: `Exploration session ended.`,
           },
         ],
       };
@@ -348,7 +338,7 @@ async function executeBrowserStepAction(
   session: ExplorationSession,
   browserStep: z.infer<typeof BrowserStepSchema>,
   timeoutMs?: number,
-): Promise<{ content: { type: "text"; text: string }[] }> {
+): Promise<{ content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> }> {
   // Ensure browser driver exists (lazy initialization)
   if (!session.browserDriver) {
     try {
@@ -395,11 +385,6 @@ async function executeBrowserStepAction(
     };
   }
 
-  // Save screenshot
-  const screenshotName = `explore_${Date.now()}.png`;
-  const screenshotPath = join(session.artifactDir, screenshotName);
-  await writeFile(screenshotPath, state.screenshot);
-
   // Mask DOM
   const maskedDom = session.masker.mask("dom_snapshot", state.dom) as string;
 
@@ -411,7 +396,6 @@ async function executeBrowserStepAction(
   }
   lines.push(`**URL:** ${state.url}`);
   lines.push(`**Title:** ${state.title}`);
-  lines.push(`**Screenshot:** ${screenshotPath}`);
   lines.push("");
   lines.push("## DOM");
   lines.push("```html");
@@ -419,7 +403,14 @@ async function executeBrowserStepAction(
   lines.push("```");
 
   return {
-    content: [{ type: "text" as const, text: lines.join("\n") }],
+    content: [
+      { type: "text" as const, text: lines.join("\n") },
+      {
+        type: "image" as const,
+        data: Buffer.from(state.screenshot).toString("base64"),
+        mimeType: "image/png",
+      },
+    ],
   };
 }
 

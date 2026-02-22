@@ -18,7 +18,7 @@ vi.mock("../../driver/scenario-runner.js", () => {
 });
 
 type ToolCallback = (args: Record<string, unknown>, extra: Record<string, unknown>) => Promise<{
-  content: Array<{ type: string; text: string }>;
+  content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
   isError?: boolean;
 }>;
 

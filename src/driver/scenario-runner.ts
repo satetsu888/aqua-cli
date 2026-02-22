@@ -6,9 +6,6 @@ import { BrowserDriver } from "./browser.js";
 import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies } from "./step-utils.js";
 import { expandObject } from "../utils/template.js";
 import { Masker } from "../masking/index.js";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 export interface ScenarioRunResult {
   status: "passed" | "failed" | "error";
@@ -19,7 +16,6 @@ export interface ScenarioRunResult {
   skipped: number;
   results: StepResult[];
   resolvedVariables: Record<string, string>;
-  artifactDir?: string;
 }
 
 export class ScenarioRunner {
@@ -92,12 +88,6 @@ export class ScenarioRunner {
       browserDriver = new BrowserDriver(undefined, this.proxyConfig);
     }
 
-    // Create temp directory for artifacts (screenshots, DOM snapshots)
-    let artifactDir: string | undefined;
-    if (hasBrowserSteps) {
-      artifactDir = await mkdtemp(join(tmpdir(), "aqua-run-scenario-"));
-    }
-
     // Resolve execution order based on depends_on
     const ordered = resolveStepOrder(scenario.steps);
 
@@ -158,22 +148,6 @@ export class ScenarioRunner {
           Object.assign(variables, result.extractedValues);
         }
 
-        // Save browser artifacts locally
-        if (artifactDir && result.browserArtifacts) {
-          for (const artifact of result.browserArtifacts) {
-            const ext = artifact.type === "screenshot" ? ".png" : ".html";
-            const filename = `${step.step_key}_${artifact.name}${ext}`;
-            let data: Buffer | string = artifact.data;
-            if (artifact.type === "dom_snapshot") {
-              data = Buffer.from(
-                masker.mask("dom_snapshot", artifact.data.toString("utf-8")) as string,
-                "utf-8",
-              );
-            }
-            await writeFile(join(artifactDir, filename), data);
-          }
-        }
-
         results.push(result);
         completedSteps.set(step.step_key, result);
 
@@ -217,9 +191,7 @@ export class ScenarioRunner {
       }
     }
 
-    const runResult = this.buildResult(results, variables, masker);
-    runResult.artifactDir = artifactDir;
-    return runResult;
+    return this.buildResult(results, variables, masker);
   }
 
   private buildResult(

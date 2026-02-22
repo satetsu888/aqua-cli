@@ -39,16 +39,11 @@ vi.mock("../../driver/step-utils.js", () => ({
   checkBrowserDependencies: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("node:fs/promises", () => ({
-  mkdtemp: vi.fn().mockResolvedValue("/tmp/aqua-explore-test"),
-  writeFile: vi.fn().mockResolvedValue(undefined),
-}));
-
 type ToolCallback = (
   args: Record<string, unknown>,
   extra: Record<string, unknown>
 ) => Promise<{
-  content: Array<{ type: string; text: string }>;
+  content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
   isError?: boolean;
 }>;
 
@@ -221,7 +216,7 @@ describe("exploration tools", () => {
       expect(startResult.content[0].text).toContain("Variables loaded:");
 
       // Verify by running an HTTP action that uses the variables
-      const sessionId = startResult.content[0].text.match(
+      const sessionId = startResult.content[0].text!.match(
         /Session ID:\*\* (.+)/
       )![1];
 
@@ -294,7 +289,7 @@ describe("exploration tools", () => {
       const result = await server.getHandler("start_exploration")(
         overrides ?? {}
       );
-      return result.content[0].text.match(/Session ID:\*\* (.+)/)![1];
+      return result.content[0].text!.match(/Session ID:\*\* (.+)/)![1];
     }
 
     it("returns error for expired/unknown session", async () => {
@@ -341,11 +336,15 @@ describe("exploration tools", () => {
         });
 
         expect(result.isError).toBeUndefined();
-        const text = result.content[0].text;
+        const text = result.content[0].text!;
         expect(text).toContain("**URL:** http://example.com");
         expect(text).toContain("**Title:** Example");
-        expect(text).toContain("**Screenshot:**");
         expect(text).toContain("<h1>Hello</h1>");
+        // Screenshot returned as inline image content
+        const imageContent = result.content.find((c) => c.type === "image");
+        expect(imageContent).toBeDefined();
+        expect(imageContent!.mimeType).toBe("image/png");
+        expect(imageContent!.data).toBe(Buffer.from("fake-png").toString("base64"));
       });
 
       it("returns page state even when step fails", async () => {
@@ -626,7 +625,7 @@ describe("exploration tools", () => {
         client as unknown as AquaClient
       );
       const startResult = await server.getHandler("start_exploration")({});
-      const sessionId = startResult.content[0].text.match(
+      const sessionId = startResult.content[0].text!.match(
         /Session ID:\*\* (.+)/
       )![1];
 
@@ -635,7 +634,6 @@ describe("exploration tools", () => {
       });
 
       expect(result.content[0].text).toContain("Exploration session ended.");
-      expect(result.content[0].text).toContain("Artifacts saved in:");
     });
 
     it("closes browser driver when session has one", async () => {
@@ -644,7 +642,7 @@ describe("exploration tools", () => {
         client as unknown as AquaClient
       );
       const startResult = await server.getHandler("start_exploration")({});
-      const sessionId = startResult.content[0].text.match(
+      const sessionId = startResult.content[0].text!.match(
         /Session ID:\*\* (.+)/
       )![1];
 
@@ -690,7 +688,7 @@ describe("exploration tools", () => {
         client as unknown as AquaClient
       );
       const startResult = await server.getHandler("start_exploration")({});
-      const sessionId = startResult.content[0].text.match(
+      const sessionId = startResult.content[0].text!.match(
         /Session ID:\*\* (.+)/
       )![1];
 

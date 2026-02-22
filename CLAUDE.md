@@ -205,7 +205,7 @@ function createMockServer() {
 
 - `execute_qa_plan` - QA Plan を実行（全シナリオを順次実行し結果を記録。`env_name` で環境選択可能。レスポンスにはマスク済み resolved variables と Web UI の実行結果 URL を含む。`async=true` でバックグラウンド実行可能、`get_execution_progress` でポーリング。MCP Progress Notification にも対応）
 - `get_execution_progress` - 実行中の Execution の進捗をステップ単位で取得（完了済みステップ・現在実行中のステップ・統計情報）
-- `run_scenario` - 単一シナリオを直接実行（サーバー記録なし、インラインでシナリオ config を指定）。`qa_plan_id` でプラン変数を継承可能。HTTP レスポンスボディ等の詳細をレスポンスに含む。ブラウザスクリーンショットはローカル保存してパスを返す
+- `run_scenario` - 単一シナリオを直接実行（サーバー記録なし、インラインでシナリオ config を指定）。`qa_plan_id` でプラン変数を継承可能。HTTP レスポンスボディ等の詳細をレスポンスに含む。ブラウザスクリーンショットは MCP image content としてインライン返却（ファイル保存なし）
 - `get_execution` - 実行結果取得（ステップ詳細含む）
 - `list_executions` - 実行一覧（`qa_plan_id` / `qa_plan_version_id` / `status` でフィルタ可能）。カーソルベースページネーション（`limit` / `cursor` パラメータ、`{ items, next_cursor }` レスポンス）
 
