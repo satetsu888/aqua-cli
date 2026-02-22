@@ -224,8 +224,8 @@ export class HttpDriver implements Driver {
             message: `Unknown assertion type: ${assertion.type}`,
           };
       }
-      if (assertion.description) {
-        result.description = assertion.description;
+      if ((assertion as Record<string, unknown>).id) {
+        result.step_assertion_id = (assertion as Record<string, unknown>).id as string;
       }
       return result;
     });

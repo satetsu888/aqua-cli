@@ -255,7 +255,7 @@ function createMockServer() {
 
 `qa-plan/types.ts` で Zod スキーマとして定義し、`z.infer<>` で TypeScript 型を導出（single source of truth）。
 
-全アサーションタイプに任意の `description` フィールド（`string | undefined`）があり、アサーションの目的・意図を記述可能（例: `"ユーザー情報が正常に返ること"`）。CLI が定義から実行結果にパススルーし、サーバーに送信・Web UI で表示。
+全アサーションタイプに任意の `description` フィールド（`string | undefined`）があり、アサーションの目的・意図を記述可能（例: `"ユーザー情報が正常に返ること"`）。サーバー側で `step_assertions` テーブルに正規化して保存される。CLI は実行結果に `step_assertion_id` を含めて送信し、サーバーが description を enrichment して返す。
 
 **HTTP アサーション** (`HttpAssertion`):
 - `status_code` - ステータスコード完全一致（`{ type: "status_code", expected: 200, description: "..." }`）

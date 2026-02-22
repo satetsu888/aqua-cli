@@ -214,7 +214,7 @@ describe("QAPlanExecutor", () => {
     });
   });
 
-  it("includes description in assertion result payload sent to server", async () => {
+  it("includes step_assertion_id in assertion result payload sent to server", async () => {
     const headers = new Map([["content-type", "application/json"]]);
     mockFetch.mockResolvedValue({
       status: 200,
@@ -242,8 +242,9 @@ describe("QAPlanExecutor", () => {
                 {
                   type: "status_code",
                   expected: 200,
+                  id: "ast_abc123",
                   description: "API returns success",
-                },
+                } as never,
               ],
               sort_order: 0,
             },
@@ -260,7 +261,7 @@ describe("QAPlanExecutor", () => {
       expect.objectContaining({
         assertion_type: "status_code",
         passed: true,
-        description: "API returns success",
+        step_assertion_id: "ast_abc123",
       }),
     ]);
   });

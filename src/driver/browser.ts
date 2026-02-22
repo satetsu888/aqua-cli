@@ -320,8 +320,8 @@ export class BrowserDriver {
             message: `Unknown browser assertion type: ${assertion.type}`,
           };
       }
-      if (assertion.description) {
-        result.description = assertion.description;
+      if ((assertion as Record<string, unknown>).id) {
+        result.step_assertion_id = (assertion as Record<string, unknown>).id as string;
       }
       results.push(result);
     }

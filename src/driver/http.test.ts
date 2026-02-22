@@ -154,7 +154,7 @@ describe("HttpDriver", () => {
     expect(result.assertionResults?.[0].passed).toBe(true);
   });
 
-  it("passes through description from assertion definition to result", async () => {
+  it("passes through step_assertion_id from assertion definition to result", async () => {
     mockFetch.mockReturnValue(successResponse("{}", 200));
 
     const step = httpStep({
@@ -162,19 +162,18 @@ describe("HttpDriver", () => {
         {
           type: "status_code",
           expected: 200,
+          id: "ast_abc123",
           description: "API returns success",
-        },
+        } as never,
       ],
     });
     const result = await driver.execute(step, {});
 
     expect(result.assertionResults?.[0].passed).toBe(true);
-    expect(result.assertionResults?.[0].description).toBe(
-      "API returns success"
-    );
+    expect(result.assertionResults?.[0].step_assertion_id).toBe("ast_abc123");
   });
 
-  it("omits description when not set on assertion", async () => {
+  it("omits step_assertion_id when not set on assertion", async () => {
     mockFetch.mockReturnValue(successResponse("{}", 200));
 
     const step = httpStep({
@@ -183,7 +182,7 @@ describe("HttpDriver", () => {
     const result = await driver.execute(step, {});
 
     expect(result.assertionResults?.[0].passed).toBe(true);
-    expect(result.assertionResults?.[0].description).toBeUndefined();
+    expect(result.assertionResults?.[0].step_assertion_id).toBeUndefined();
   });
 
   it("extracts values from response", async () => {
