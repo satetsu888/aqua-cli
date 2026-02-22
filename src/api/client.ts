@@ -505,6 +505,7 @@ export class AquaClient {
       actual?: string;
       passed: boolean;
       message?: string;
+      description?: string;
     }>
   ): Promise<AssertionResult[]> {
     return this.request<AssertionResult[]>("POST", "/api/assertions", {

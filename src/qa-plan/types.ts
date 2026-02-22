@@ -111,11 +111,13 @@ export type PollUntil = z.infer<typeof PollUntilSchema>;
 export const StatusCodeAssertionSchema = z.object({
   type: z.literal("status_code"),
   expected: z.number().describe("Expected HTTP status code"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const StatusCodeInAssertionSchema = z.object({
   type: z.literal("status_code_in"),
   expected: z.array(z.number()).describe("List of acceptable HTTP status codes"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const JsonPathAssertionSchema = z.object({
@@ -131,6 +133,7 @@ export const JsonPathAssertionSchema = z.object({
     .unknown()
     .optional()
     .describe("Expected value (required for equals/contains, unused for exists/not_exists)"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const HttpAssertionSchema = z.discriminatedUnion("type", [
@@ -148,38 +151,44 @@ export const ElementTextAssertionSchema = z.object({
     .string()
     .optional()
     .describe("Substring to check in element text. Omit to just check text exists"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const ElementVisibleAssertionSchema = z.object({
   type: z.literal("element_visible"),
   selector: z.string().describe("CSS selector for the element"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const ScreenshotAssertionSchema = z.object({
   type: z.literal("screenshot"),
   name: z.string().optional().describe("Screenshot name"),
-  description: z.string().optional().describe("Screenshot description"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const UrlContainsAssertionSchema = z.object({
   type: z.literal("url_contains"),
   expected: z.string().describe("Substring that current URL should contain"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const TitleAssertionSchema = z.object({
   type: z.literal("title"),
   expected: z.string().describe("Expected exact page title"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const ElementNotVisibleAssertionSchema = z.object({
   type: z.literal("element_not_visible"),
   selector: z.string().describe("CSS selector for the element"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const ElementCountAssertionSchema = z.object({
   type: z.literal("element_count"),
   selector: z.string().describe("CSS selector to count matching elements"),
   expected: z.number().describe("Expected number of matching elements"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const ElementAttributeAssertionSchema = z.object({
@@ -187,11 +196,13 @@ export const ElementAttributeAssertionSchema = z.object({
   selector: z.string().describe("CSS selector for the element"),
   attribute: z.string().describe("Attribute name to check"),
   expected: z.string().describe("Expected attribute value"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const CookieExistsAssertionSchema = z.object({
   type: z.literal("cookie_exists"),
   name: z.string().describe("Cookie name to check"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const CookieValueAssertionSchema = z.object({
@@ -202,11 +213,13 @@ export const CookieValueAssertionSchema = z.object({
     .enum(["exact", "contains"])
     .optional()
     .describe("Match mode (default: exact)"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const LocalStorageExistsAssertionSchema = z.object({
   type: z.literal("localstorage_exists"),
   key: z.string().describe("localStorage key to check"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const LocalStorageValueAssertionSchema = z.object({
@@ -217,6 +230,7 @@ export const LocalStorageValueAssertionSchema = z.object({
     .enum(["exact", "contains"])
     .optional()
     .describe("Match mode (default: exact)"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
 export const BrowserAssertionSchema = z.discriminatedUnion("type", [
@@ -312,4 +326,5 @@ export interface AssertionResultData {
   actual?: string;
   passed: boolean;
   message?: string;
+  description?: string;
 }

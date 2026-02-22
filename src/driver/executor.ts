@@ -485,6 +485,7 @@ export class QAPlanExecutor {
         actual: ar.actual,
         passed: ar.passed,
         message: ar.message,
+        description: ar.description,
       }));
       try {
         await this.client.createAssertionResults(assertionPayloads);

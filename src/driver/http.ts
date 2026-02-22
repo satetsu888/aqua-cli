@@ -201,25 +201,33 @@ export class HttpDriver implements Driver {
     if (!step.assertions) return [];
 
     return step.assertions.map((assertion) => {
+      let result: AssertionResultData;
       switch (assertion.type) {
         case "status_code":
-          return this.assertStatusCode(response, assertion.expected);
+          result = this.assertStatusCode(response, assertion.expected);
+          break;
         case "status_code_in":
-          return this.assertStatusCodeIn(response, assertion.expected);
+          result = this.assertStatusCodeIn(response, assertion.expected);
+          break;
         case "json_path":
-          return this.assertJsonPath(
+          result = this.assertJsonPath(
             response,
             assertion.path,
             assertion.condition,
             assertion.expected
           );
+          break;
         default:
-          return {
+          result = {
             type: assertion.type,
             passed: false,
             message: `Unknown assertion type: ${assertion.type}`,
           };
       }
+      if (assertion.description) {
+        result.description = assertion.description;
+      }
+      return result;
     });
   }
 

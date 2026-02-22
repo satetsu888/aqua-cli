@@ -217,36 +217,34 @@ export class BrowserDriver {
 
     const results: AssertionResultData[] = [];
     for (const assertion of step.assertions) {
+      let result: AssertionResultData;
       switch (assertion.type) {
         case "element_text": {
-          const result = await this.assertElementText(
+          result = await this.assertElementText(
             assertion.selector,
             assertion.contains
           );
-          results.push(result);
           break;
         }
         case "element_visible": {
-          const result = await this.assertElementVisible(assertion.selector);
-          results.push(result);
+          result = await this.assertElementVisible(assertion.selector);
           break;
         }
         case "screenshot": {
           // Screenshot assertions are informational - they always pass
           // The actual screenshot is captured in executeBrowserStep
-          results.push({
+          result = {
             type: "screenshot",
             expected: assertion.name ?? "screenshot",
             actual: "captured",
             passed: true,
-            message: assertion.description,
-          });
+          };
           break;
         }
         case "url_contains": {
           const currentUrl = this.activeFrame!.url();
           const expected = assertion.expected;
-          results.push({
+          result = {
             type: "url_contains",
             expected,
             actual: currentUrl,
@@ -254,13 +252,13 @@ export class BrowserDriver {
             message: currentUrl.includes(expected)
               ? undefined
               : `URL "${currentUrl}" does not contain "${expected}"`,
-          });
+          };
           break;
         }
         case "title": {
           const title = await this.activeFrame!.title();
           const expected = assertion.expected;
-          results.push({
+          result = {
             type: "title",
             expected,
             actual: title,
@@ -269,66 +267,63 @@ export class BrowserDriver {
               title === expected
                 ? undefined
                 : `Expected title "${expected}", got "${title}"`,
-          });
+          };
           break;
         }
         case "element_not_visible": {
-          const result = await this.assertElementNotVisible(assertion.selector);
-          results.push(result);
+          result = await this.assertElementNotVisible(assertion.selector);
           break;
         }
         case "element_count": {
-          const result = await this.assertElementCount(
+          result = await this.assertElementCount(
             assertion.selector,
             assertion.expected
           );
-          results.push(result);
           break;
         }
         case "element_attribute": {
-          const result = await this.assertElementAttribute(
+          result = await this.assertElementAttribute(
             assertion.selector,
             assertion.attribute,
             assertion.expected
           );
-          results.push(result);
           break;
         }
         case "cookie_exists": {
-          const result = await this.assertCookieExists(assertion.name);
-          results.push(result);
+          result = await this.assertCookieExists(assertion.name);
           break;
         }
         case "cookie_value": {
-          const result = await this.assertCookieValue(
+          result = await this.assertCookieValue(
             assertion.name,
             assertion.expected,
             assertion.match
           );
-          results.push(result);
           break;
         }
         case "localstorage_exists": {
-          const result = await this.assertLocalStorageExists(assertion.key);
-          results.push(result);
+          result = await this.assertLocalStorageExists(assertion.key);
           break;
         }
         case "localstorage_value": {
-          const result = await this.assertLocalStorageValue(
+          result = await this.assertLocalStorageValue(
             assertion.key,
             assertion.expected,
             assertion.match
           );
-          results.push(result);
           break;
         }
         default:
-          results.push({
+          result = {
             type: assertion.type,
             passed: false,
             message: `Unknown browser assertion type: ${assertion.type}`,
-          });
+          };
       }
+      if (assertion.description) {
+        result.description = assertion.description;
+      }
+      results.push(result);
     }
     return results;
   }

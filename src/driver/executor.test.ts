@@ -214,6 +214,57 @@ describe("QAPlanExecutor", () => {
     });
   });
 
+  it("includes description in assertion result payload sent to server", async () => {
+    const headers = new Map([["content-type", "application/json"]]);
+    mockFetch.mockResolvedValue({
+      status: 200,
+      text: () => Promise.resolve("{}"),
+      headers: {
+        forEach: (cb: (v: string, k: string) => void) =>
+          headers.forEach((v, k) => cb(v, k)),
+      },
+    });
+
+    const plan: QAPlanData = {
+      name: "Test",
+      scenarios: [
+        {
+          id: "sc1",
+          name: "S1",
+          sort_order: 0,
+          steps: [
+            {
+              id: "sd1",
+              step_key: "s1",
+              action: "http_request",
+              config: { method: "GET", url: "http://example.com" },
+              assertions: [
+                {
+                  type: "status_code",
+                  expected: 200,
+                  description: "API returns success",
+                },
+              ],
+              sort_order: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    const client = createMockClient();
+    const executor = new QAPlanExecutor(client);
+    await executor.execute(plan, "pv1");
+
+    expect(client.createAssertionResults).toHaveBeenCalledWith([
+      expect.objectContaining({
+        assertion_type: "status_code",
+        passed: true,
+        description: "API returns success",
+      }),
+    ]);
+  });
+
   it("skips step when dependency not met", async () => {
     const headers = new Map([["content-type", "application/json"]]);
     mockFetch.mockResolvedValue({

@@ -154,6 +154,38 @@ describe("HttpDriver", () => {
     expect(result.assertionResults?.[0].passed).toBe(true);
   });
 
+  it("passes through description from assertion definition to result", async () => {
+    mockFetch.mockReturnValue(successResponse("{}", 200));
+
+    const step = httpStep({
+      assertions: [
+        {
+          type: "status_code",
+          expected: 200,
+          description: "API returns success",
+        },
+      ],
+    });
+    const result = await driver.execute(step, {});
+
+    expect(result.assertionResults?.[0].passed).toBe(true);
+    expect(result.assertionResults?.[0].description).toBe(
+      "API returns success"
+    );
+  });
+
+  it("omits description when not set on assertion", async () => {
+    mockFetch.mockReturnValue(successResponse("{}", 200));
+
+    const step = httpStep({
+      assertions: [{ type: "status_code", expected: 200 }],
+    });
+    const result = await driver.execute(step, {});
+
+    expect(result.assertionResults?.[0].passed).toBe(true);
+    expect(result.assertionResults?.[0].description).toBeUndefined();
+  });
+
   it("extracts values from response", async () => {
     mockFetch.mockReturnValue(
       successResponse(JSON.stringify({ token: "abc123" }))
