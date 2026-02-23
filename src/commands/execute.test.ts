@@ -56,7 +56,6 @@ function createMockClient() {
       },
     ]),
     getQuotaStatus: vi.fn().mockResolvedValue({
-      execution: { exceeded: false, used: 0, limit: -1 },
       storage: { exceeded: false, used: 0, limit: -1 },
     }),
   };
@@ -272,7 +271,6 @@ describe("executeQAPlan", () => {
   describe("quota pre-check", () => {
     it("passes skipRecording=false when quota is not exceeded", async () => {
       client.getQuotaStatus.mockResolvedValue({
-        execution: { exceeded: false, used: 10, limit: 50 },
         storage: { exceeded: false, used: 100, limit: 1000 },
       });
 
@@ -282,21 +280,8 @@ describe("executeQAPlan", () => {
       expect(skipRecordingArg).toBe(false);
     });
 
-    it("passes skipRecording=true when execution quota exceeded", async () => {
-      client.getQuotaStatus.mockResolvedValue({
-        execution: { exceeded: true, used: 50, limit: 50 },
-        storage: { exceeded: false, used: 100, limit: 1000 },
-      });
-
-      await executeQAPlan(client as unknown as AquaClient, { qaPlanId: "p1" });
-
-      const skipRecordingArg = mockExecute.mock.calls[0][7];
-      expect(skipRecordingArg).toBe(true);
-    });
-
     it("passes skipRecording=true when storage quota exceeded", async () => {
       client.getQuotaStatus.mockResolvedValue({
-        execution: { exceeded: false, used: 10, limit: 50 },
         storage: { exceeded: true, used: 2000, limit: 1000 },
       });
 

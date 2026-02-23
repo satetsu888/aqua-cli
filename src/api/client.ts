@@ -92,7 +92,6 @@ export interface QuotaStatusEntry {
 }
 
 export interface QuotaStatus {
-  execution: QuotaStatusEntry;
   storage: QuotaStatusEntry;
 }
 

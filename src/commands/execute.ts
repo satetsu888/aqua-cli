@@ -87,7 +87,7 @@ export async function executeQAPlan(
   let skipRecording = false;
   try {
     const quotaStatus = await client.getQuotaStatus();
-    if (quotaStatus.execution.exceeded || quotaStatus.storage.exceeded) {
+    if (quotaStatus.storage.exceeded) {
       skipRecording = true;
       process.stderr.write(
         "\nWarning: Quota exceeded. Test results will not be saved to the server.\n\n"
