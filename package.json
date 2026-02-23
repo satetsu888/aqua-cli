@@ -1,5 +1,5 @@
 {
-  "name": "@satetsu888/aqua-cli",
+  "name": "@aquaqa/cli",
   "version": "0.1.0",
   "description": "QA planning, execution, and analysis service with AI agents",
   "type": "module",

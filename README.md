@@ -1,4 +1,4 @@
-# @satetsu888/aqua-cli
+# @aquaqa/cli
 
 CLI and MCP Server for **aqua** — a QA planning and execution service designed for AI agents.
 
@@ -9,7 +9,7 @@ aqua lets AI agents (such as Claude Code) create QA test plans and execute them 
 ```text
 AI Agent (Claude Code, etc.)
   ↕ MCP Protocol (stdio)
-@satetsu888/aqua-cli (this package)    ← MCP server + test execution engine
+@aquaqa/cli (this package)    ← MCP server + test execution engine
   ↕ HTTP REST API
 aqua Backend Server (Go)           ← data persistence & API
   ↕
@@ -37,7 +37,7 @@ docker compose up -d    # starts server at http://localhost:9080
 Authenticate with the aqua server:
 
 ```bash
-npx @satetsu888/aqua-cli login --server-url http://localhost:9080
+npx @aquaqa/cli login --server-url http://localhost:9080
 ```
 
 This opens a browser for authentication and saves credentials to `~/.aqua/credentials.json`.
@@ -47,7 +47,7 @@ This opens a browser for authentication and saves credentials to `~/.aqua/creden
 Run this in your project root:
 
 ```bash
-npx @satetsu888/aqua-cli init --server-url http://localhost:9080
+npx @aquaqa/cli init --server-url http://localhost:9080
 ```
 
 This creates `.aqua/config.json` with `server_url` and `project_key`. The MCP server reads it automatically on startup.
@@ -59,7 +59,7 @@ If `--server-url` is omitted, it defaults to `http://localhost:9080`.
 Start Claude Code with aqua as an MCP server:
 
 ```bash
-claude --mcp-config '{"mcpServers":{"aqua":{"command":"npx","args":["@satetsu888/aqua-cli","mcp-server"]}}}'
+claude --mcp-config '{"mcpServers":{"aqua":{"command":"npx","args":["@aquaqa/cli","mcp-server"]}}}'
 ```
 
 ## CLI Commands

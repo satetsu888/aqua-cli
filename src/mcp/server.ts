@@ -64,7 +64,7 @@ export async function startMCPServer(
 ## Setup
 
 If .aqua/config.json does not exist in the project directory, run the following command to initialize:
-  npx @satetsu888/aqua-cli init --server-url <server_url>
+  npx @aquaqa/cli init --server-url <server_url>
 
 ## Typical Workflow
 

@@ -26,7 +26,7 @@ export function registerSetupTools(
       } else {
         lines.push("## Local Configuration: ⚠ Not initialized");
         lines.push(
-          "Run `npx @satetsu888/aqua-cli init --server-url <server_url>` to initialize the project."
+          "Run `npx @aquaqa/cli init --server-url <server_url>` to initialize the project."
         );
       }
       lines.push("");
@@ -112,7 +112,7 @@ export function registerSetupTools(
       const recommendations: string[] = [];
       if (!config) {
         recommendations.push(
-          "Initialize the project with `npx @satetsu888/aqua-cli init --server-url <server_url>`"
+          "Initialize the project with `npx @aquaqa/cli init --server-url <server_url>`"
         );
       }
       if (environments.length === 0) {
