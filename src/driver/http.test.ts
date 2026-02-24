@@ -332,5 +332,53 @@ describe("HttpDriver", () => {
       expect(args.requestTls).toBeUndefined();
       expect(args.proxyTls).toBeUndefined();
     });
+
+    it("does not set dispatcher when URL matches bypass pattern", async () => {
+      const proxyDriver = new HttpDriver({
+        server: "http://proxy.example.com:3128",
+        bypass: "localhost,.internal.com",
+      });
+      mockFetch.mockReturnValue(successResponse("{}"));
+
+      const step = httpStep({
+        config: { method: "GET", url: "http://localhost:8080/api" },
+      });
+      await proxyDriver.execute(step, {});
+
+      const fetchOpts = mockFetch.mock.calls[0][1];
+      expect(fetchOpts.dispatcher).toBeUndefined();
+    });
+
+    it("sets dispatcher when URL does not match bypass pattern", async () => {
+      const proxyDriver = new HttpDriver({
+        server: "http://proxy.example.com:3128",
+        bypass: "localhost,.internal.com",
+      });
+      mockFetch.mockReturnValue(successResponse("{}"));
+
+      const step = httpStep({
+        config: { method: "GET", url: "http://external.example.com/api" },
+      });
+      await proxyDriver.execute(step, {});
+
+      const fetchOpts = mockFetch.mock.calls[0][1];
+      expect(fetchOpts.dispatcher).toBeDefined();
+    });
+
+    it("bypasses proxy for suffix-matched domains", async () => {
+      const proxyDriver = new HttpDriver({
+        server: "http://proxy.example.com:3128",
+        bypass: ".internal.com",
+      });
+      mockFetch.mockReturnValue(successResponse("{}"));
+
+      const step = httpStep({
+        config: { method: "GET", url: "http://api.internal.com/data" },
+      });
+      await proxyDriver.execute(step, {});
+
+      const fetchOpts = mockFetch.mock.calls[0][1];
+      expect(fetchOpts.dispatcher).toBeUndefined();
+    });
   });
 });

@@ -36,6 +36,7 @@ cli/
 │   │   ├── types.ts           # Driver インターフェース
 │   │   ├── http.ts            # HTTP Driver (fetch + assertion)
 │   │   ├── browser.ts         # Browser Driver (Playwright)
+│   │   ├── proxy-bypass.ts    # プロキシ bypass パターンマッチング（HTTP Driver 用）
 │   │   ├── step-utils.ts      # ステップ実行共有ユーティリティ（依存順序解決・依存チェック・ブラウザ確認）
 │   │   ├── executor.ts        # シナリオ実行エンジン（サーバー記録あり）
 │   │   └── scenario-runner.ts # 単一シナリオ軽量実行（サーバー記録なし、run_scenario 用）

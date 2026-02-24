@@ -10,13 +10,18 @@ import type {
 import type { ResolvedProxyConfig } from "../environment/types.js";
 import { expandObject } from "../utils/template.js";
 import { ProxyAgent } from "undici";
+import { parseBypassPatterns, shouldBypassProxy } from "./proxy-bypass.js";
 
 export class HttpDriver implements Driver {
   private proxyDispatcher: ProxyAgent | undefined;
+  private bypassPatterns: string[] = [];
 
   constructor(proxyConfig?: ResolvedProxyConfig) {
     if (proxyConfig) {
       this.initProxy(proxyConfig);
+      if (proxyConfig.bypass) {
+        this.bypassPatterns = parseBypassPatterns(proxyConfig.bypass);
+      }
     }
   }
 
@@ -197,7 +202,7 @@ export class HttpDriver implements Driver {
         body: config.body ? JSON.stringify(config.body) : undefined,
         signal: controller.signal,
       };
-      if (this.proxyDispatcher) {
+      if (this.proxyDispatcher && !shouldBypassProxy(config.url, this.bypassPatterns)) {
         fetchOpts.dispatcher = this.proxyDispatcher;
       }
       const res = await fetch(config.url, fetchOpts as RequestInit);
