@@ -25,7 +25,29 @@ export class HttpDriver implements Driver {
       config.username && config.password
         ? `Basic ${Buffer.from(`${config.username}:${config.password}`).toString("base64")}`
         : undefined;
-    this.proxyDispatcher = new ProxyAgent({ uri: config.server, token });
+
+    const requestTls: Record<string, unknown> = {};
+    if (config.caCert) {
+      requestTls.ca = config.caCert;
+    }
+    if (config.rejectUnauthorized !== undefined) {
+      requestTls.rejectUnauthorized = config.rejectUnauthorized;
+    }
+
+    const proxyTls: Record<string, unknown> = {};
+    if (config.proxyCaCert) {
+      proxyTls.ca = config.proxyCaCert;
+    }
+    if (config.rejectUnauthorized !== undefined) {
+      proxyTls.rejectUnauthorized = config.rejectUnauthorized;
+    }
+
+    this.proxyDispatcher = new ProxyAgent({
+      uri: config.server,
+      token,
+      ...(Object.keys(requestTls).length > 0 && { requestTls }),
+      ...(Object.keys(proxyTls).length > 0 && { proxyTls }),
+    });
   }
 
   async execute(

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HttpDriver } from "./http.js";
+import { ProxyAgent } from "undici";
 import type { Step } from "../qa-plan/types.js";
+
+vi.mock("undici", () => ({
+  ProxyAgent: vi.fn(),
+}));
 
 describe("HttpDriver", () => {
   const driver = new HttpDriver();
@@ -257,6 +262,75 @@ describe("HttpDriver", () => {
 
       const fetchOpts = mockFetch.mock.calls[0][1];
       expect(fetchOpts.dispatcher).toBeDefined();
+    });
+
+    it("passes requestTls with ca when caCert is provided", () => {
+      const caCert = Buffer.from("test-ca-cert");
+      new HttpDriver({
+        server: "http://proxy.example.com:3128",
+        caCert,
+      });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestTls: expect.objectContaining({ ca: caCert }),
+        }),
+      );
+    });
+
+    it("passes proxyTls with ca when proxyCaCert is provided", () => {
+      const proxyCaCert = Buffer.from("test-proxy-ca-cert");
+      new HttpDriver({
+        server: "https://proxy.example.com:3128",
+        proxyCaCert,
+      });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          proxyTls: expect.objectContaining({ ca: proxyCaCert }),
+        }),
+      );
+    });
+
+    it("passes rejectUnauthorized to both requestTls and proxyTls", () => {
+      new HttpDriver({
+        server: "http://proxy.example.com:3128",
+        rejectUnauthorized: false,
+      });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestTls: expect.objectContaining({ rejectUnauthorized: false }),
+          proxyTls: expect.objectContaining({ rejectUnauthorized: false }),
+        }),
+      );
+    });
+
+    it("uses separate CA certs for requestTls and proxyTls", () => {
+      const caCert = Buffer.from("target-ca");
+      const proxyCaCert = Buffer.from("proxy-ca");
+      new HttpDriver({
+        server: "https://proxy.example.com:3128",
+        caCert,
+        proxyCaCert,
+      });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestTls: expect.objectContaining({ ca: caCert }),
+          proxyTls: expect.objectContaining({ ca: proxyCaCert }),
+        }),
+      );
+    });
+
+    it("does not set TLS options when not configured", () => {
+      new HttpDriver({
+        server: "http://proxy.example.com:3128",
+      });
+
+      const args = vi.mocked(ProxyAgent).mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(args.requestTls).toBeUndefined();
+      expect(args.proxyTls).toBeUndefined();
     });
   });
 });

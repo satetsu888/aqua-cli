@@ -1,4 +1,5 @@
-import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
+import { readFile, readdir, writeFile, mkdir, access } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join, basename, extname, dirname } from "node:path";
 import { getProjectRoot } from "../config/projectRoot.js";
 import { environmentFileSchema } from "./types.js";
@@ -143,6 +144,15 @@ export async function resolveEnvironment(
       const pw = await resolveSecretEntry(envFile.proxy.password, "proxy password", secretProviders);
       proxy.password = pw;
       secretValues.add(pw);
+    }
+    if (envFile.proxy.ca_cert_path) {
+      proxy.caCert = readFileSync(envFile.proxy.ca_cert_path);
+    }
+    if (envFile.proxy.proxy_ca_cert_path) {
+      proxy.proxyCaCert = readFileSync(envFile.proxy.proxy_ca_cert_path);
+    }
+    if (envFile.proxy.reject_unauthorized !== undefined) {
+      proxy.rejectUnauthorized = envFile.proxy.reject_unauthorized;
     }
   }
 
@@ -325,6 +335,23 @@ export async function validateEnvironment(
       proxyEntries.push(["password", envFile.proxy.password]);
     }
     validateSecretEntries(proxyEntries, "Proxy ", issues, envFile.secret_providers);
+
+    for (const [field, label] of [
+      ["ca_cert_path", "CA certificate"],
+      ["proxy_ca_cert_path", "Proxy CA certificate"],
+    ] as const) {
+      const certPath = envFile.proxy[field];
+      if (certPath) {
+        try {
+          await access(certPath);
+        } catch {
+          issues.push({
+            severity: "warning",
+            message: `${label} file not found: ${certPath}`,
+          });
+        }
+      }
+    }
   }
 
   // Check for variable/secret key conflicts

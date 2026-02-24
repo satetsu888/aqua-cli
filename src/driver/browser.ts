@@ -118,9 +118,18 @@ export class BrowserDriver {
     if (this.browser && this.page) return;
 
     const { chromium } = await import("playwright");
-    this.browser = await chromium.launch({ headless: true });
+    const launchOpts: Parameters<typeof chromium.launch>[0] = { headless: true };
+    if (this.proxyConfig?.rejectUnauthorized === false) {
+      launchOpts.args = ["--ignore-certificate-errors"];
+    }
+    this.browser = await chromium.launch(launchOpts);
 
     const contextOpts: Parameters<Browser["newContext"]>[0] = {};
+    if (this.proxyConfig?.rejectUnauthorized === false
+        || this.proxyConfig?.caCert
+        || this.proxyConfig?.proxyCaCert) {
+      contextOpts.ignoreHTTPSErrors = true;
+    }
     if (this.initialStorageState) {
       contextOpts.storageState = this.initialStorageState;
     }

@@ -330,7 +330,10 @@ QA Plan 内の `{{variable}}` は実行時の environment で展開される（`
     "server": "http://proxy.corp.com:3128",
     "bypass": "localhost,.internal.com",
     "username": { "type": "literal", "value": "user" },
-    "password": { "type": "env", "value": "PROXY_PASSWORD" }
+    "password": { "type": "env", "value": "PROXY_PASSWORD" },
+    "ca_cert_path": "/path/to/target-ca.pem",
+    "proxy_ca_cert_path": "/path/to/proxy-ca.pem",
+    "reject_unauthorized": false
   }
 }
 ```
@@ -347,6 +350,9 @@ QA Plan 内の `{{variable}}` は実行時の environment で展開される（`
 - 外部 CLI ベースの type（`op`, `aws_sm`, `gcp_sm`, `hcv`）がある場合、実行前に CLI の存在を自動チェックする
 - secrets の解決はプランが参照する変数のみに限定される（`collectVariableReferences` でプランを静的解析し、`loadEnvironment` / `resolveEnvironment` の `requiredKeys` パラメータでフィルタ）。プランが使わない外部 type の secret があっても CLI ログインは不要
 - `proxy`: HTTP リクエスト・ブラウザアクセスに使用するプロキシ設定（optional）。`server` はプロキシ URL、`bypass` はバイパスドメイン（カンマ区切り）、`username`/`password` は SecretEntry 形式の認証情報（optional）。HTTP Driver は undici ProxyAgent、Browser Driver は Playwright の newContext proxy オプションで適用
+  - `ca_cert_path`（optional）: 接続先サーバー用の CA 証明書ファイルパス。自己署名証明書を使う接続先や SSL インターセプト proxy 環境で使用。HTTP Driver では `requestTls.ca` に適用
+  - `proxy_ca_cert_path`（optional）: proxy サーバー用の CA 証明書ファイルパス。HTTPS proxy が自己署名証明書を使う場合に使用。HTTP Driver では `proxyTls.ca` に適用
+  - `reject_unauthorized`（optional）: `false` で証明書検証をスキップ。HTTP Driver では `requestTls` と `proxyTls` の両方に適用。Browser Driver では `--ignore-certificate-errors` と `ignoreHTTPSErrors` で対応
 - 変数優先順位: QA Plan variables < environment file < execute_qa_plan の environment 引数
 - secrets はサーバー送信時にレイヤー単位でマスクされる（`***` に置換）
 - MCP の `create_environment` ツールでファイル作成可能

@@ -262,6 +262,14 @@ Environment files are stored at `.aqua/environments/<name>.json` and define vari
     "hcv": { "address": "https://vault.example.com:8200" },
     "aws_sm": { "region": "ap-northeast-1", "profile": "staging" },
     "gcp_sm": { "project": "my-project-123" }
+  },
+  "proxy": {
+    "server": "http://proxy.corp.com:3128",
+    "bypass": "localhost,.internal.com",
+    "username": { "type": "literal", "value": "user" },
+    "password": { "type": "env", "value": "PROXY_PASSWORD" },
+    "ca_cert_path": "/path/to/target-ca.pem",
+    "reject_unauthorized": false
   }
 }
 ```
@@ -303,6 +311,25 @@ Provider-level defaults for external secret resolvers. These apply to all secret
 | `gcp_sm` | `project` | Default GCP project for all `gcp_sm` secrets |
 
 This is the recommended way to configure external resolvers, especially when running as an MCP server where process environment variables may not be available.
+
+#### Proxy Configuration
+
+Route HTTP requests and browser access through a proxy server. Add a `proxy` section to your environment file:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `server` | `string` | Proxy server URL (e.g. `http://proxy:3128` or `https://proxy:3128`) |
+| `bypass` | `string?` | Comma-separated domains to bypass the proxy |
+| `username` | `SecretEntry?` | Proxy authentication username |
+| `password` | `SecretEntry?` | Proxy authentication password |
+| `ca_cert_path` | `string?` | Path to CA certificate file for target server TLS (e.g. self-signed certs, SSL-intercepting proxies) |
+| `proxy_ca_cert_path` | `string?` | Path to CA certificate file for the proxy server itself (when proxy uses HTTPS with custom CA) |
+| `reject_unauthorized` | `boolean?` | Set to `false` to skip certificate verification for both proxy and target connections |
+
+**How TLS options are applied:**
+
+- **HTTP Driver** (undici ProxyAgent): `ca_cert_path` → `requestTls.ca`, `proxy_ca_cert_path` → `proxyTls.ca`, `reject_unauthorized` → both
+- **Browser Driver** (Playwright/Chromium): `reject_unauthorized: false` → `--ignore-certificate-errors` launch flag + `ignoreHTTPSErrors` context option. Custom CA files require adding the CA to the system trust store (Chromium limitation)
 
 Secrets are resolved locally at execution time. Only secrets actually referenced by the QA plan (via `{{variable}}` templates) are resolved — unused secrets don't require CLI authentication. All secret values are masked (`***`) before being sent to the server.
 

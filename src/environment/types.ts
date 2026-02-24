@@ -39,6 +39,9 @@ export const proxyConfigSchema = z.object({
   bypass: z.string().optional(),
   username: secretEntrySchema.optional(),
   password: secretEntrySchema.optional(),
+  ca_cert_path: z.string().optional(),
+  proxy_ca_cert_path: z.string().optional(),
+  reject_unauthorized: z.boolean().optional(),
 });
 
 export const secretProvidersSchema = z.record(z.record(z.string())).optional();
@@ -59,6 +62,9 @@ export interface ResolvedProxyConfig {
   bypass?: string;
   username?: string;
   password?: string;
+  caCert?: Buffer;
+  proxyCaCert?: Buffer;
+  rejectUnauthorized?: boolean;
 }
 
 export interface ResolvedEnvironment {

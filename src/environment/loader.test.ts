@@ -3,6 +3,11 @@ import { resolveEnvironment } from "./loader.js";
 import { registerResolver, getResolver } from "./resolver-registry.js";
 import type { ExternalSecretResolver } from "./resolver-registry.js";
 import type { EnvironmentFile } from "./types.js";
+import { readFileSync } from "node:fs";
+
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+}));
 
 describe("resolveEnvironment", () => {
   const originalEnv = { ...process.env };
@@ -307,6 +312,55 @@ describe("resolveEnvironment", () => {
       };
       const result = await resolveEnvironment(envFile);
       expect(result.proxy).toBeUndefined();
+    });
+
+    it("reads ca_cert_path into caCert buffer", async () => {
+      const certData = Buffer.from("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----");
+      vi.mocked(readFileSync).mockReturnValue(certData);
+      const envFile: EnvironmentFile = {
+        proxy: {
+          server: "http://proxy:3128",
+          ca_cert_path: "/path/to/target-ca.pem",
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(readFileSync).toHaveBeenCalledWith("/path/to/target-ca.pem");
+      expect(result.proxy?.caCert).toEqual(certData);
+    });
+
+    it("reads proxy_ca_cert_path into proxyCaCert buffer", async () => {
+      const certData = Buffer.from("-----BEGIN CERTIFICATE-----\nproxy\n-----END CERTIFICATE-----");
+      vi.mocked(readFileSync).mockReturnValue(certData);
+      const envFile: EnvironmentFile = {
+        proxy: {
+          server: "https://proxy:3128",
+          proxy_ca_cert_path: "/path/to/proxy-ca.pem",
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(readFileSync).toHaveBeenCalledWith("/path/to/proxy-ca.pem");
+      expect(result.proxy?.proxyCaCert).toEqual(certData);
+    });
+
+    it("passes through reject_unauthorized", async () => {
+      const envFile: EnvironmentFile = {
+        proxy: {
+          server: "http://proxy:3128",
+          reject_unauthorized: false,
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.proxy?.rejectUnauthorized).toBe(false);
+    });
+
+    it("does not set TLS fields when not configured", async () => {
+      const envFile: EnvironmentFile = {
+        proxy: { server: "http://proxy:3128" },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.proxy?.caCert).toBeUndefined();
+      expect(result.proxy?.proxyCaCert).toBeUndefined();
+      expect(result.proxy?.rejectUnauthorized).toBeUndefined();
     });
   });
 });
