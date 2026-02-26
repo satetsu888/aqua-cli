@@ -7,6 +7,7 @@ import {
   HttpRequestConfigSchema,
   BrowserConfigSchema,
 } from "../../qa-plan/types.js";
+import { unescapeUnicode } from "../sanitize.js";
 
 export const ASSERTIONS_DESCRIPTION = `Assertions to evaluate after step execution. Examples:
 
@@ -100,8 +101,8 @@ This creates an empty plan with no versions. A plan cannot be executed until a v
     },
     async ({ name, description, git_branch, pull_request_url }) => {
       const plan = await client.createQAPlan({
-        name,
-        description: description ?? "",
+        name: unescapeUnicode(name),
+        description: unescapeUnicode(description ?? ""),
         git_branch: git_branch ?? detectCurrentBranch() ?? "",
         pull_request_url: pull_request_url ?? detectPullRequestURL() ?? "",
       });
@@ -207,11 +208,11 @@ Key behaviors:
     },
     async ({ id, name, description, variables, scenarios }) => {
       const version = await client.createQAPlanVersion(id, {
-        name,
-        description,
+        name: name ? unescapeUnicode(name) : undefined,
+        description: description ? unescapeUnicode(description) : undefined,
         variables,
         scenarios: scenarios.map((s) => ({
-          name: s.name ?? "",
+          name: unescapeUnicode(s.name ?? ""),
           common_scenario_id: s.common_scenario_id,
           requires: s.requires,
           steps: (s.steps ?? []).map((st) => ({

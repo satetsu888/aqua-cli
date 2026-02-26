@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AquaClient } from "../../api/client.js";
 import { StepSchema } from "./qa-plan.js";
+import { unescapeUnicode } from "../sanitize.js";
 
 export function registerCommonScenarioTools(
   server: McpServer,
@@ -24,8 +25,8 @@ export function registerCommonScenarioTools(
     },
     async ({ name, description, requires, steps }) => {
       const cs = await client.createCommonScenario({
-        name,
-        description: description ?? "",
+        name: unescapeUnicode(name),
+        description: unescapeUnicode(description ?? ""),
         requires,
         steps: steps.map((s) => ({
           step_key: s.step_key,
@@ -103,8 +104,8 @@ export function registerCommonScenarioTools(
     },
     async ({ id, name, description, requires, steps }) => {
       const cs = await client.updateCommonScenario(id, {
-        name,
-        description,
+        name: name ? unescapeUnicode(name) : undefined,
+        description: description ? unescapeUnicode(description) : undefined,
         requires,
         steps: steps?.map((s) => ({
           step_key: s.step_key,
