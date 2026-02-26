@@ -152,17 +152,27 @@ This creates an empty plan with no versions. A plan cannot be executed until a v
         .boolean()
         .optional()
         .describe("Include archived plans in results. Default: false (archived plans are hidden)"),
+      git_branch: z
+        .string()
+        .optional()
+        .describe("Filter by git branch name (exact match). Example: 'feature/login'"),
+      pull_request_url: z
+        .string()
+        .optional()
+        .describe("Filter by pull request URL (partial match). Example: 'pull/42' to find PR #42"),
       limit: z.number().optional().describe("Maximum number of results per page"),
       cursor: z
         .string()
         .optional()
         .describe("Cursor for pagination. Use next_cursor from previous response to get next page"),
     },
-    async ({ status, pinned, include_archived, limit, cursor }) => {
+    async ({ status, pinned, include_archived, git_branch, pull_request_url, limit, cursor }) => {
       const result = await client.listQAPlans({
         status,
         pinned,
         include_archived,
+        git_branch,
+        pull_request_url,
         limit,
         cursor,
       });

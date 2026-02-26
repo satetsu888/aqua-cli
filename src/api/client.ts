@@ -251,6 +251,8 @@ export class AquaClient {
     status?: string;
     pinned?: boolean;
     include_archived?: boolean;
+    git_branch?: string;
+    pull_request_url?: string;
     limit?: number;
     cursor?: string;
   }): Promise<{ items: QAPlan[]; next_cursor: string | null }> {
@@ -259,6 +261,8 @@ export class AquaClient {
     if (params?.status) query.set("status", params.status);
     if (params?.pinned !== undefined) query.set("pinned", String(params.pinned));
     if (params?.include_archived) query.set("include_archived", "true");
+    if (params?.git_branch) query.set("git_branch", params.git_branch);
+    if (params?.pull_request_url) query.set("pull_request_url", params.pull_request_url);
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.cursor) query.set("cursor", params.cursor);
     const qs = query.toString();
