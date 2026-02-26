@@ -17,7 +17,7 @@ import {
 } from "../../qa-plan/types.js";
 import type { Step } from "../../qa-plan/types.js";
 
-const SESSION_TIMEOUT_MS = 60_000;
+const SESSION_TIMEOUT_MS = 900_000;
 
 interface ExplorationSession {
   id: string;
@@ -64,7 +64,7 @@ Use this when you need to:
 - Inspect API response formats and values to understand the target application
 - Iteratively test individual actions with immediate feedback (navigate → inspect → click → inspect → ...)
 
-The session keeps the browser alive between actions, so you can build up page state incrementally without relaunching the browser each time. Session auto-expires after 60 seconds of inactivity.
+The session keeps the browser alive between actions, so you can build up page state incrementally without relaunching the browser each time. Session auto-expires after 15 minutes of inactivity.
 
 WHEN TO USE start_exploration vs run_scenario:
 - start_exploration: You DON'T know the page structure yet. You need to explore interactively, discover selectors, inspect API responses, and gather information before building a scenario.
@@ -244,7 +244,7 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
           content: [
             {
               type: "text" as const,
-              text: "Session not found. It may have expired (timeout: 60s). Use start_exploration to create a new session.",
+              text: "Session not found. It may have expired (timeout: 15min). Use start_exploration to create a new session.",
             },
           ],
           isError: true,
@@ -301,7 +301,7 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
     "end_exploration",
     `End an exploration session and clean up resources (close browser, release memory).
 Always call this when you are done exploring to free up the browser process.
-If you forget, the session will auto-expire after 60 seconds of inactivity.`,
+If you forget, the session will auto-expire after 15 minutes of inactivity.`,
     {
       session_id: z
         .string()
