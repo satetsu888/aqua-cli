@@ -27,6 +27,7 @@ cli/
 │   │       ├── execution.ts   # 実行ツール
 │   │       ├── scenario.ts    # 単一シナリオ直接実行ツール（run_scenario）
 │   │       ├── exploration.ts # インタラクティブ探索セッション（start_exploration, explore_action, end_exploration）
+│   │       ├── exploration-log.ts # 探索ログ参照ツール（list_exploration_logs, get_exploration_log）
 │   │       ├── common-scenario.ts # 共通シナリオ CRUD ツール
 │   │       ├── environment.ts # 環境設定ツール
 │   │       ├── memory.ts      # プロジェクトメモリツール
@@ -40,6 +41,8 @@ cli/
 │   │   ├── step-utils.ts      # ステップ実行共有ユーティリティ（依存順序解決・依存チェック・ブラウザ確認）
 │   │   ├── executor.ts        # シナリオ実行エンジン（サーバー記録あり）
 │   │   └── scenario-runner.ts # 単一シナリオ軽量実行（サーバー記録なし、run_scenario 用）
+│   ├── exploration/           # 探索セッションログの永続化
+│   │   └── log.ts             # ログの読み書き・クリーンアップ（~/.aqua/explorations/）
 │   ├── recorder/              # ブラウザ操作記録（Playwright codegen 連携）
 │   │   ├── recorder.ts        # codegen サブプロセスの起動・管理
 │   │   └── codegen-parser.ts  # codegen JS 出力 → BrowserStep[] パーサー
@@ -231,9 +234,11 @@ function createMockServer() {
 
 ### Exploration ツール
 
-- `start_exploration` - インタラクティブ探索セッションを開始。ページ構造やセレクタが不明な段階で、1アクションずつ実行して結果を確認しながら調査するために使用。`env_name` / `environment` / `qa_plan_id` で変数を事前ロード可能。セッションは60秒無操作でタイムアウト
-- `explore_action` - セッション内で単一アクションを実行。`browser_step`（ブラウザ操作→DOM全体+screenshot+URL+title を返却）、`http_request`（HTTPリクエスト→status+headers+body を返却、`extract` で値抽出可能）、`browser_assertion`（アサーション評価）のいずれかを指定。ブラウザはセッション間で起動したまま維持
+- `start_exploration` - インタラクティブ探索セッションを開始。ページ構造やセレクタが不明な段階で、1アクションずつ実行して結果を確認しながら調査するために使用。`env_name` / `environment` / `qa_plan_id` で変数を事前ロード可能。セッションは15分無操作でタイムアウト。セッション中のアクションは `~/.aqua/explorations/` に自動保存される
+- `explore_action` - セッション内でアクションを実行。`browser_step`（単一ブラウザ操作→DOM全体+screenshot+URL+title を返却）、`browser_steps`（複数ブラウザ操作を一括実行→最終状態のみ返却、過去の探索ログからのリプレイに使用）、`http_request`（HTTPリクエスト→status+headers+body を返却、`extract` で値抽出可能）、`browser_assertion`（アサーション評価）のいずれかを指定。ブラウザはセッション間で起動したまま維持
 - `end_exploration` - 探索セッションを終了しリソースを解放
+- `list_exploration_logs` - 最近の探索セッションログ一覧を取得。各セッションのアクション数・成功数・最終URLを表示
+- `get_exploration_log` - 特定セッションの全アクションログを取得。成功したブラウザステップの一覧も含まれ、`browser_steps` パラメータにそのまま渡してリプレイ可能
 
 ### Recorder ツール
 

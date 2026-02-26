@@ -16,11 +16,17 @@ import {
   BrowserAssertionSchema,
 } from "../../qa-plan/types.js";
 import type { Step } from "../../qa-plan/types.js";
+import {
+  createExplorationLog,
+  appendExplorationAction,
+} from "../../exploration/log.js";
+import type { ExplorationLogAction } from "../../exploration/log.js";
 
 const SESSION_TIMEOUT_MS = 900_000;
 
 interface ExplorationSession {
   id: string;
+  projectKey?: string;
   browserDriver: BrowserDriver | null;
   httpDriver: HttpDriver;
   variables: Record<string, string>;
@@ -54,6 +60,7 @@ async function cleanupSession(sessionId: string): Promise<void> {
 export function registerExplorationTools(
   server: McpServer,
   client: AquaClient,
+  projectKey?: string,
 ) {
   server.tool(
     "start_exploration",
@@ -160,6 +167,7 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
       const sessionId = randomUUID();
       const session: ExplorationSession = {
         id: sessionId,
+        projectKey,
         browserDriver: null,
         httpDriver: new HttpDriver(resolvedEnv?.proxy),
         variables,
@@ -172,6 +180,13 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
         ),
       };
       sessions.set(sessionId, session);
+
+      // Create exploration log file
+      try {
+        createExplorationLog(sessionId, projectKey);
+      } catch {
+        // Non-critical: log creation failure should not block exploration
+      }
 
       const varCount = Object.keys(variables).length;
       return {
@@ -193,14 +208,18 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
 
   server.tool(
     "explore_action",
-    `Execute a single action within an exploration session and get immediate feedback.
+    `Execute action(s) within an exploration session and get immediate feedback.
 The session (and browser) stays alive between calls, so you can build up state incrementally.
 
-Provide exactly ONE of: browser_step, http_request, or browser_assertion.
+Provide exactly ONE of: browser_step, browser_steps, http_request, or browser_assertion.
 
 - browser_step: Execute a single browser action (goto, click, type, etc.).
-  Returns the full page DOM HTML, a screenshot path, current URL, and page title after execution.
+  Returns the full page DOM HTML, a screenshot, current URL, and page title after execution.
   Use the DOM to discover CSS selectors for subsequent actions.
+- browser_steps: Execute multiple browser actions in sequence without intermediate DOM/screenshot feedback.
+  Only the final page state is returned. Use this to replay known action sequences quickly
+  (e.g., from a previous exploration log via get_exploration_log) without consuming context on intermediate states.
+  If any step fails, execution stops and returns the error with the page state at that point.
 - http_request: Send an HTTP request.
   Returns the response status, headers, and full body. Use extract to capture values into session variables for subsequent actions via {{variable}} templates.
 - browser_assertion: Evaluate a single browser assertion (element_visible, element_text, etc.) to check page state without modifying it.`,
@@ -211,6 +230,12 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
       browser_step: BrowserStepSchema.optional().describe(
         'Single browser action to execute. Examples: { goto: "https://example.com" }, { click: "#submit" }, { type: { selector: "#email", text: "user@example.com" } }'
       ),
+      browser_steps: z
+        .array(BrowserStepSchema)
+        .optional()
+        .describe(
+          'Multiple browser actions to execute in sequence. Only the final page state is returned. Use this to replay known action sequences quickly.'
+        ),
       http_request: HttpRequestConfigSchema.optional().describe(
         'HTTP request to execute. Example: { method: "GET", url: "https://api.example.com/users" }'
       ),
@@ -233,6 +258,7 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
     async ({
       session_id,
       browser_step,
+      browser_steps,
       http_request,
       browser_assertion,
       extract,
@@ -253,8 +279,8 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
 
       resetSessionTimeout(session);
 
-      // Validate exactly one action
-      const actionCount = [browser_step, http_request, browser_assertion].filter(
+      // Validate exactly one action type
+      const actionCount = [browser_step, browser_steps, http_request, browser_assertion].filter(
         Boolean
       ).length;
       if (actionCount !== 1) {
@@ -262,7 +288,7 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
           content: [
             {
               type: "text" as const,
-              text: "Provide exactly one of: browser_step, http_request, or browser_assertion.",
+              text: "Provide exactly one of: browser_step, browser_steps, http_request, or browser_assertion.",
             },
           ],
           isError: true,
@@ -273,6 +299,14 @@ Provide exactly ONE of: browser_step, http_request, or browser_assertion.
         return await executeBrowserStepAction(
           session,
           browser_step,
+          timeout_ms
+        );
+      }
+
+      if (browser_steps) {
+        return await executeBrowserStepsAction(
+          session,
+          browser_steps,
           timeout_ms
         );
       }
@@ -334,26 +368,36 @@ If you forget, the session will auto-expire after 15 minutes of inactivity.`,
   );
 }
 
+function logAction(session: ExplorationSession, action: ExplorationLogAction): void {
+  try {
+    appendExplorationAction(session.id, action, session.projectKey);
+  } catch {
+    // Non-critical: log failure should not affect exploration
+  }
+}
+
+async function ensureBrowserDriver(
+  session: ExplorationSession,
+): Promise<string | null> {
+  if (session.browserDriver) return null;
+
+  try {
+    await checkBrowserDependencies();
+  } catch (err) {
+    return `Browser not available: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  session.browserDriver = new BrowserDriver(undefined, session.proxyConfig);
+  return null;
+}
+
 async function executeBrowserStepAction(
   session: ExplorationSession,
   browserStep: z.infer<typeof BrowserStepSchema>,
   timeoutMs?: number,
 ): Promise<{ content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> }> {
-  // Ensure browser driver exists (lazy initialization)
-  if (!session.browserDriver) {
-    try {
-      await checkBrowserDependencies();
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Browser not available: ${err instanceof Error ? err.message : String(err)}`,
-          },
-        ],
-      };
-    }
-    session.browserDriver = new BrowserDriver(undefined, session.proxyConfig);
+  const browserError = await ensureBrowserDriver(session);
+  if (browserError) {
+    return { content: [{ type: "text" as const, text: browserError }] };
   }
 
   // Expand variables in browser step
@@ -361,7 +405,7 @@ async function executeBrowserStepAction(
 
   let error: string | undefined;
   try {
-    await session.browserDriver.executeSingleBrowserStep(
+    await session.browserDriver!.executeSingleBrowserStep(
       expandedStep,
       timeoutMs
     );
@@ -370,7 +414,17 @@ async function executeBrowserStepAction(
   }
 
   // Get page state (even if step failed, page might still have useful state)
-  const state = await session.browserDriver.getPageState();
+  const state = await session.browserDriver!.getPageState();
+
+  // Log action (use original step, not expanded, to preserve templates)
+  logAction(session, {
+    type: "browser_step",
+    input: browserStep,
+    success: !error,
+    error,
+    url_after: state?.url,
+    timestamp: new Date().toISOString(),
+  });
 
   if (!state) {
     return {
@@ -392,6 +446,99 @@ async function executeBrowserStepAction(
   const lines: string[] = [];
   if (error) {
     lines.push(`**Error:** ${error}`);
+    lines.push("");
+  }
+  lines.push(`**URL:** ${state.url}`);
+  lines.push(`**Title:** ${state.title}`);
+  lines.push("");
+  lines.push("## DOM");
+  lines.push("```html");
+  lines.push(maskedDom);
+  lines.push("```");
+
+  return {
+    content: [
+      { type: "text" as const, text: lines.join("\n") },
+      {
+        type: "image" as const,
+        data: Buffer.from(state.screenshot).toString("base64"),
+        mimeType: "image/png",
+      },
+    ],
+  };
+}
+
+async function executeBrowserStepsAction(
+  session: ExplorationSession,
+  browserSteps: z.infer<typeof BrowserStepSchema>[],
+  timeoutMs?: number,
+): Promise<{ content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> }> {
+  const browserError = await ensureBrowserDriver(session);
+  if (browserError) {
+    return { content: [{ type: "text" as const, text: browserError }] };
+  }
+
+  let failedAtStep: number | undefined;
+  let error: string | undefined;
+
+  for (let i = 0; i < browserSteps.length; i++) {
+    const step = browserSteps[i];
+    const expandedStep = expandObject(step, session.variables);
+
+    try {
+      await session.browserDriver!.executeSingleBrowserStep(
+        expandedStep,
+        timeoutMs
+      );
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      failedAtStep = i + 1;
+
+      // Log the failed step (url_after will be captured from final page state below)
+      logAction(session, {
+        type: "browser_step",
+        input: step,
+        success: false,
+        error,
+        timestamp: new Date().toISOString(),
+      });
+
+      break;
+    }
+
+    // Log each successful step (skip url_after to avoid expensive getPageState calls)
+    logAction(session, {
+      type: "browser_step",
+      input: step,
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Get final page state (only once, at the end)
+  const state = await session.browserDriver!.getPageState();
+
+  if (!state) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: error
+            ? `Step ${failedAtStep}/${browserSteps.length} failed: ${error}\n\nBrowser state could not be captured.`
+            : "Browser state could not be captured.",
+        },
+      ],
+    };
+  }
+
+  const maskedDom = session.masker.mask("dom_snapshot", state.dom) as string;
+
+  const lines: string[] = [];
+  if (error) {
+    lines.push(`**Error at step ${failedAtStep}/${browserSteps.length}:** ${error}`);
+    lines.push("");
+  } else {
+    lines.push(`**All ${browserSteps.length} steps completed successfully.**`);
     lines.push("");
   }
   lines.push(`**URL:** ${state.url}`);
@@ -442,6 +589,16 @@ async function executeHttpAction(
   if (result.extractedValues) {
     Object.assign(session.variables, result.extractedValues);
   }
+
+  // Log action
+  logAction(session, {
+    type: "http_request",
+    input: httpConfig,
+    success: !result.errorMessage,
+    error: result.errorMessage,
+    http_status: result.response?.status,
+    timestamp: new Date().toISOString(),
+  });
 
   // Build response
   const lines: string[] = [];
@@ -523,6 +680,14 @@ async function executeBrowserAssertionAction(
     const result =
       await session.browserDriver.evaluateSingleAssertion(expandedAssertion);
 
+    // Log action
+    logAction(session, {
+      type: "browser_assertion",
+      input: assertion,
+      success: result.passed,
+      timestamp: new Date().toISOString(),
+    });
+
     const icon = result.passed ? "PASS" : "FAIL";
     const lines: string[] = [`**[${icon}]** ${result.type}`];
     if (result.expected) lines.push(`**Expected:** ${result.expected}`);
@@ -533,6 +698,15 @@ async function executeBrowserAssertionAction(
       content: [{ type: "text" as const, text: lines.join("\n") }],
     };
   } catch (err) {
+    // Log failed assertion
+    logAction(session, {
+      type: "browser_assertion",
+      input: assertion,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    });
+
     return {
       content: [
         {

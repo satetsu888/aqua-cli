@@ -13,6 +13,8 @@ import { registerSetupTools } from "./tools/setup.js";
 import { registerRecorderTools } from "./tools/recorder.js";
 import { registerProgressTools } from "./tools/progress.js";
 import { registerExplorationTools } from "./tools/exploration.js";
+import { registerExplorationLogTools } from "./tools/exploration-log.js";
+import { cleanupAllExplorationLogs } from "../exploration/log.js";
 
 export async function startMCPServer(
   serverURL: string,
@@ -148,6 +150,10 @@ Use exploration when you need to:
 - Inspect API response formats and values
 - Iteratively test actions with immediate feedback
 
+### Replaying Previous Explorations
+
+Exploration sessions are automatically logged to disk. Use list_exploration_logs to see recent sessions and get_exploration_log to retrieve the action sequence from a previous session. To quickly replay a known sequence (e.g., login flow discovered in a previous session), pass the actions to explore_action's browser_steps parameter — this executes them all at once without returning intermediate DOM/screenshots, saving context.
+
 ## Quick Testing with run_scenario
 
 When you ALREADY have a complete scenario definition and want to validate it works in a single call, use run_scenario.
@@ -183,7 +189,15 @@ Each project can store a memory document for accumulating project knowledge lear
   registerMemoryTools(server, client);
   registerRecorderTools(server);
   registerProgressTools(server, client);
-  registerExplorationTools(server, client);
+  registerExplorationTools(server, client, projectKey);
+  registerExplorationLogTools(server, projectKey);
+
+  // Cleanup old exploration logs (best-effort, non-blocking)
+  try {
+    cleanupAllExplorationLogs();
+  } catch {
+    // ignore
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
