@@ -70,9 +70,9 @@ export class BrowserDriver {
         assertionResults.every((a) => a.passed);
 
       // Capture DOM snapshot
-      if (this.page) {
+      if (this.activeFrame) {
         try {
-          const html = await this.page.content();
+          const html = await this.activeFrame.content();
           artifacts.push({
             name: `${step.step_key}_dom`,
             type: "dom_snapshot",
@@ -662,9 +662,10 @@ export class BrowserDriver {
     if (!this.page) return null;
     try {
       const screenshot = Buffer.from(await this.page.screenshot({ fullPage: true }));
-      const dom = await this.page.content();
-      const url = this.page.url();
-      const title = await this.page.title();
+      const frame = this.activeFrame ?? this.page;
+      const dom = await frame.content();
+      const url = frame.url();
+      const title = await frame.title();
       return { screenshot, dom, url, title };
     } catch {
       return null;

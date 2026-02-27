@@ -528,6 +528,35 @@ describe("BrowserDriver iframe support", () => {
     });
   });
 
+  describe("DOM snapshot captures active frame content", () => {
+    it("captures iframe DOM in artifact after switch_to_frame", async () => {
+      mockFrame.content.mockResolvedValue(
+        "<html><body>iframe content</body></html>"
+      );
+
+      const driver = await createDriver();
+      const step = makeStep([
+        { switch_to_frame: "iframe#payment" },
+        { click: ".card-input" },
+      ]);
+
+      const result = await driver.execute(step, {});
+
+      // DOM snapshot artifact should contain iframe content, not main page
+      const domArtifact = result.browserArtifacts?.find(
+        (a) => a.type === "dom_snapshot"
+      );
+      expect(domArtifact).toBeDefined();
+      expect(domArtifact!.data.toString("utf-8")).toBe(
+        "<html><body>iframe content</body></html>"
+      );
+      // Should have called frame.content(), not page.content()
+      expect(mockFrame.content).toHaveBeenCalled();
+
+      await driver.close();
+    });
+  });
+
   describe("executeSingleBrowserStep", () => {
     it("executes a single browser step without resetting activeFrame", async () => {
       const driver = await createDriver();
@@ -616,6 +645,35 @@ describe("BrowserDriver iframe support", () => {
       const state = await driver.getPageState();
 
       expect(state).toBeNull();
+
+      await driver.close();
+    });
+
+    it("returns iframe DOM, URL, and title after switch_to_frame", async () => {
+      const driver = await createDriver();
+      // Navigate to a page containing an iframe
+      await driver.executeSingleBrowserStep({ goto: "http://example.com" });
+
+      // Switch to iframe
+      const step = makeStep([{ switch_to_frame: "iframe#payment" }]);
+      await driver.execute(step, {});
+
+      mockPage.screenshot.mockResolvedValue(Buffer.from("screenshot-data"));
+      mockFrame.content.mockResolvedValue(
+        "<html><body>iframe content</body></html>"
+      );
+      mockFrame.url.mockReturnValue("http://iframe.example.com/form");
+      mockFrame.title.mockResolvedValue("Iframe Title");
+
+      const state = await driver.getPageState();
+
+      expect(state).not.toBeNull();
+      // Screenshot should still come from the page (full page capture)
+      expect(mockPage.screenshot).toHaveBeenCalled();
+      // DOM, URL, title should come from the iframe frame
+      expect(state!.dom).toBe("<html><body>iframe content</body></html>");
+      expect(state!.url).toBe("http://iframe.example.com/form");
+      expect(state!.title).toBe("Iframe Title");
 
       await driver.close();
     });
