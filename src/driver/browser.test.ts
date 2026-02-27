@@ -93,9 +93,9 @@ function makeStep(
 }
 
 // Dynamic import so vi.mock is applied before module load
-async function createDriver() {
+async function createDriver(viewport?: { width: number; height: number }) {
   const { BrowserDriver } = await import("./browser.js");
-  return new BrowserDriver();
+  return new BrowserDriver(undefined, undefined, viewport);
 }
 
 describe("BrowserDriver iframe support", () => {
@@ -732,6 +732,35 @@ describe("BrowserDriver iframe support", () => {
 
       expect(result.passed).toBe(true);
       expect(result.actual).toBe("http://example.com/dashboard");
+
+      await driver.close();
+    });
+  });
+
+  describe("viewport", () => {
+    it("passes viewport to newContext when specified", async () => {
+      const driver = await createDriver({ width: 375, height: 667 });
+      const step = makeStep([{ goto: "http://example.com" }]);
+
+      await driver.execute(step, {});
+
+      expect(mockBrowser.newContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          viewport: { width: 375, height: 667 },
+        })
+      );
+
+      await driver.close();
+    });
+
+    it("does not set viewport in newContext when not specified", async () => {
+      const driver = await createDriver();
+      const step = makeStep([{ goto: "http://example.com" }]);
+
+      await driver.execute(step, {});
+
+      const contextOpts = mockBrowser.newContext.mock.calls[0][0];
+      expect(contextOpts.viewport).toBeUndefined();
 
       await driver.close();
     });

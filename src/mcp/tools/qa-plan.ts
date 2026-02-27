@@ -22,6 +22,7 @@ http_request (POST): { method: "POST", url: "{{api_base_url}}/users", headers: {
 http_request (polling): { method: "GET", url: "{{api_base_url}}/jobs/{{job_id}}", poll: { until: { type: "json_path", path: "$.status", expected: "completed" }, interval_ms: 1000, timeout_ms: 30000 } }
 
 browser: { steps: [{ goto: "{{web_base_url}}/login" }, { type: { selector: "#email", text: "user@example.com" } }, { click: "#submit" }, { wait_for_selector: ".dashboard" }, { screenshot: "result" }] }
+browser (mobile): { viewport: "mobile", steps: [{ goto: "{{web_base_url}}" }, { click: ".hamburger-menu" }, { screenshot: "mobile_menu" }] }
 
 Available browser actions (these are ALL supported actions): goto (navigate to URL), click (CSS selector), double_click (CSS selector), type (fill input field: { selector, text }), hover (CSS selector), select_option (dropdown: { selector, value }), check (checkbox CSS selector), uncheck (checkbox CSS selector), press (keyboard: { selector, key } where key is e.g. Enter, Tab, Escape), focus (CSS selector), wait_for_selector (wait for element to appear), wait_for_url (wait for URL to contain substring), screenshot (capture screenshot), set_header (set extra HTTP headers), upload_file (file input: { selector, path }), switch_to_frame (CSS selector for iframe to switch into, e.g. 'iframe#payment'), switch_to_main_frame (switch back to top-level page: true).`;
 

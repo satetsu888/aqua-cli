@@ -14,6 +14,7 @@ import {
   BrowserStepSchema,
   HttpRequestConfigSchema,
   BrowserAssertionSchema,
+  VIEWPORT_PRESETS,
 } from "../../qa-plan/types.js";
 import type { Step } from "../../qa-plan/types.js";
 import {
@@ -32,6 +33,7 @@ interface ExplorationSession {
   variables: Record<string, string>;
   masker: Masker;
   proxyConfig?: ResolvedProxyConfig;
+  viewport?: { width: number; height: number };
   lastActivityAt: number;
   timeoutTimer: ReturnType<typeof setTimeout>;
 }
@@ -97,8 +99,12 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
         .number()
         .optional()
         .describe("Plan version to use for variables (defaults to latest)"),
+      viewport: z
+        .enum(["pc", "mobile"])
+        .optional()
+        .describe("Viewport preset: 'pc' (1280x720, default) or 'mobile' (375x667)"),
     },
-    async ({ env_name, environment, qa_plan_id, version }) => {
+    async ({ env_name, environment, qa_plan_id, version, viewport }) => {
       // Build variables from plan
       let planVariables: Record<string, string> = {};
       if (qa_plan_id) {
@@ -165,6 +171,7 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
 
       // Create session
       const sessionId = randomUUID();
+      const viewportSize = VIEWPORT_PRESETS[viewport ?? "pc"];
       const session: ExplorationSession = {
         id: sessionId,
         projectKey,
@@ -173,6 +180,7 @@ Typical workflow: start_exploration → explore_action (repeat) → end_explorat
         variables,
         masker,
         proxyConfig: resolvedEnv?.proxy,
+        viewport: viewportSize,
         lastActivityAt: Date.now(),
         timeoutTimer: setTimeout(
           () => cleanupSession(sessionId),
@@ -386,7 +394,7 @@ async function ensureBrowserDriver(
   } catch (err) {
     return `Browser not available: ${err instanceof Error ? err.message : String(err)}`;
   }
-  session.browserDriver = new BrowserDriver(undefined, session.proxyConfig);
+  session.browserDriver = new BrowserDriver(undefined, session.proxyConfig, session.viewport);
   return null;
 }
 

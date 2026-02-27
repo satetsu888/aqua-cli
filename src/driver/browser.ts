@@ -32,10 +32,16 @@ export class BrowserDriver {
   private extraHeaders: Record<string, string> = {};
   private initialStorageState: BrowserStorageState | undefined;
   private proxyConfig: ResolvedProxyConfig | undefined;
+  private viewport: { width: number; height: number } | undefined;
 
-  constructor(storageState?: BrowserStorageState, proxyConfig?: ResolvedProxyConfig) {
+  constructor(
+    storageState?: BrowserStorageState,
+    proxyConfig?: ResolvedProxyConfig,
+    viewport?: { width: number; height: number },
+  ) {
     this.initialStorageState = storageState;
     this.proxyConfig = proxyConfig;
+    this.viewport = viewport;
   }
 
   async execute(
@@ -140,6 +146,9 @@ export class BrowserDriver {
         username: this.proxyConfig.username,
         password: this.proxyConfig.password,
       };
+    }
+    if (this.viewport) {
+      contextOpts.viewport = this.viewport;
     }
     this.context = await this.browser.newContext(contextOpts);
     this.page = await this.context.newPage();

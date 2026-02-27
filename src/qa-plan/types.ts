@@ -98,7 +98,13 @@ export const BrowserStepSchema = z.union([
 export const BrowserConfigSchema = z.object({
   steps: z.array(BrowserStepSchema).describe("Ordered list of browser actions"),
   timeout_ms: z.number().optional().describe("Timeout for each browser action in ms (default: 10000)"),
+  viewport: z.enum(["pc", "mobile"]).optional().describe("Viewport preset: 'pc' (1280x720, default) or 'mobile' (375x667)"),
 });
+
+export const VIEWPORT_PRESETS: Record<string, { width: number; height: number }> = {
+  pc: { width: 1280, height: 720 },
+  mobile: { width: 375, height: 667 },
+};
 
 export type HttpRequestConfig = z.infer<typeof HttpRequestConfigSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;

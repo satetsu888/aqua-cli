@@ -1,4 +1,5 @@
-import type { Scenario, Step, StepResult } from "../qa-plan/types.js";
+import type { Scenario, Step, StepResult, BrowserConfig } from "../qa-plan/types.js";
+import { VIEWPORT_PRESETS } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/index.js";
 import type { StepCompleteEvent, OnStepCompleteCallback } from "./executor.js";
 import { HttpDriver } from "./http.js";
@@ -85,7 +86,10 @@ export class ScenarioRunner {
     // Create browser driver for this scenario
     let browserDriver: BrowserDriver | null = null;
     if (hasBrowserSteps) {
-      browserDriver = new BrowserDriver(undefined, this.proxyConfig);
+      const firstBrowserStep = scenario.steps.find((s) => s.action === "browser");
+      const viewportPreset = (firstBrowserStep?.config as BrowserConfig | undefined)?.viewport ?? "pc";
+      const viewport = VIEWPORT_PRESETS[viewportPreset];
+      browserDriver = new BrowserDriver(undefined, this.proxyConfig, viewport);
     }
 
     // Resolve execution order based on depends_on

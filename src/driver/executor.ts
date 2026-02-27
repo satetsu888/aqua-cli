@@ -1,4 +1,5 @@
-import type { QAPlanData, Scenario, Step, StepResult } from "../qa-plan/types.js";
+import type { QAPlanData, Scenario, Step, StepResult, BrowserConfig } from "../qa-plan/types.js";
+import { VIEWPORT_PRESETS } from "../qa-plan/types.js";
 import type { AquaClient, EnvironmentLayer, ProxyConfig } from "../api/client.js";
 import type { ResolvedEnvironment, ResolvedProxyConfig } from "../environment/index.js";
 import { HttpDriver } from "./http.js";
@@ -247,7 +248,10 @@ export class QAPlanExecutor {
     const hasBrowserSteps = scenario.steps.some((s) => s.action === "browser");
     let browserDriver: BrowserDriver | null = null;
     if (hasBrowserSteps) {
-      browserDriver = new BrowserDriver(browserStorageState, proxyConfig);
+      const firstBrowserStep = scenario.steps.find((s) => s.action === "browser");
+      const viewportPreset = (firstBrowserStep?.config as BrowserConfig | undefined)?.viewport ?? "pc";
+      const viewport = VIEWPORT_PRESETS[viewportPreset];
+      browserDriver = new BrowserDriver(browserStorageState, proxyConfig, viewport);
     }
 
     // Resolve execution order based on depends_on (within this scenario)
