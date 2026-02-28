@@ -1,3 +1,4 @@
+import pc from "picocolors";
 import {
   getCredential,
   setCredential,
@@ -19,10 +20,18 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
   const credential = await authenticate(url, opts);
 
-  console.log(`\nCredentials saved to ~/.aqua/credentials.json`);
-  console.log(`  server:  ${url}`);
-  console.log(`  api_key: ${credential.api_key.substring(0, 12)}...`);
-  console.log(`\nRun 'aqua-cli init' to set up a project.`);
+  console.log();
+  console.log(pc.cyan("  ┌───────────────────────────────┐"));
+  console.log(pc.cyan("  │                               │"));
+  console.log(pc.cyan("  │") + pc.bold(pc.cyan("   ~~ aqua ~~")) + pc.cyan("                  │"));
+  console.log(pc.cyan("  │") + "   Let's get started!" + pc.cyan("          │"));
+  console.log(pc.cyan("  │                               │"));
+  console.log(pc.cyan("  └───────────────────────────────┘"));
+  console.log();
+  console.log(pc.dim(`  Credentials saved to ~/.aqua/credentials.json`));
+  console.log(pc.dim(`    server:  ${url}`));
+  console.log(pc.dim(`    api_key: ${credential.api_key.substring(0, 12)}...`));
+  console.log(`\n  Next: Run ${pc.bold("aqua-cli init")} to set up a project.`);
 }
 
 /**
