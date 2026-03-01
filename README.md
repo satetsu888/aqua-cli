@@ -23,10 +23,10 @@ The CLI embeds two test drivers:
 
 ## Prerequisites
 
-An aqua backend server must be running. The easiest way is Docker:
+An aqua backend server must be running. You can use the hosted version at `https://app.aquaqa.com` or run your own with Docker:
 
 ```bash
-# In the aqua repository root
+# In the aqua repository root (self-hosted)
 docker compose up -d    # starts server at http://localhost:9080
 ```
 
@@ -35,6 +35,12 @@ docker compose up -d    # starts server at http://localhost:9080
 ### 1. Login
 
 Authenticate with the aqua server:
+
+```bash
+npx @aquaqa/cli login
+```
+
+For self-hosted servers, specify the URL:
 
 ```bash
 npx @aquaqa/cli login --server-url http://localhost:9080
@@ -47,12 +53,18 @@ This opens a browser for authentication and saves credentials to `~/.aqua/creden
 Run this in your project root:
 
 ```bash
+npx @aquaqa/cli init
+```
+
+For self-hosted servers:
+
+```bash
 npx @aquaqa/cli init --server-url http://localhost:9080
 ```
 
 This creates `.aqua/config.json` with `server_url` and `project_key`. The MCP server reads it automatically on startup.
 
-If `--server-url` is omitted, it defaults to `http://localhost:9080`.
+If `--server-url` is omitted, it defaults to `https://app.aquaqa.com`. For self-hosted servers, always specify `--server-url`.
 
 ### 3. Use with Claude Code
 
@@ -142,7 +154,7 @@ Server URL is resolved in this order:
 
 1. `AQUA_SERVER_URL` environment variable
 2. `.aqua/config.json`
-3. Default (`http://localhost:9080`)
+3. Default (`https://app.aquaqa.com`)
 
 ## MCP Tools
 
@@ -234,7 +246,7 @@ Stores server authentication credentials (per server URL). Managed by `aqua-cli 
 
 ```json
 {
-  "server_url": "http://localhost:9080",
+  "server_url": "https://app.aquaqa.com",
   "project_key": "github.com/owner/repo"
 }
 ```

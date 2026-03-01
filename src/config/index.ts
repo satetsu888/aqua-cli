@@ -13,7 +13,7 @@ export interface AquaConfig {
 
 const CONFIG_DIR = ".aqua";
 const CONFIG_FILE = "config.json";
-export const DEFAULT_SERVER_URL = "http://localhost:9080";
+export const DEFAULT_SERVER_URL = "https://app.aquaqa.com";
 
 function configDir(): string {
   return join(getProjectRoot(), CONFIG_DIR);
