@@ -4,31 +4,7 @@ CLI and MCP Server for **aqua** — a QA planning and execution service designed
 
 aqua lets AI agents (such as Claude Code) create QA test plans and execute them via HTTP and browser automation. This package provides the CLI tool and [MCP](https://modelcontextprotocol.io/) server that acts as the bridge between AI agents and the aqua backend.
 
-## Architecture
-
-```text
-AI Agent (Claude Code, etc.)
-  ↕ MCP Protocol (stdio)
-@aquaqa/cli (this package)    ← MCP server + test execution engine
-  ↕ HTTP REST API
-aqua Backend Server (Go)           ← data persistence & API
-  ↕
-DB (SQLite / PostgreSQL)
-```
-
-The CLI embeds two test drivers:
-
-- **HTTP Driver** — sends HTTP requests and validates responses
-- **Browser Driver** — automates browsers via Playwright (navigate, click, fill, screenshot, iframe switching, etc.)
-
-## Prerequisites
-
-An aqua backend server must be running. You can use the hosted version at `https://app.aquaqa.com` or run your own with Docker:
-
-```bash
-# In the aqua repository root (self-hosted)
-docker compose up -d    # starts server at http://localhost:9080
-```
+**Website:** https://aquaqa.com/ | **Docs:** https://aquaqa.com/docs/
 
 ## Setup
 
@@ -38,12 +14,6 @@ Authenticate with the aqua server:
 
 ```bash
 npx @aquaqa/cli login
-```
-
-For self-hosted servers, specify the URL:
-
-```bash
-npx @aquaqa/cli login --server-url http://localhost:9080
 ```
 
 This opens a browser for authentication and saves credentials to `~/.aqua/credentials.json`.
@@ -56,23 +26,32 @@ Run this in your project root:
 npx @aquaqa/cli init
 ```
 
-For self-hosted servers:
-
-```bash
-npx @aquaqa/cli init --server-url http://localhost:9080
-```
-
 This creates `.aqua/config.json` with `server_url` and `project_key`. The MCP server reads it automatically on startup.
 
-If `--server-url` is omitted, it defaults to `https://app.aquaqa.com`. For self-hosted servers, always specify `--server-url`.
+### 3. Use with your coding agent
 
-### 3. Use with Claude Code
+See the [Coding Agent Setup guide](https://aquaqa.com/docs/getting-started/installation/#3-coding-agent-setup) for detailed instructions.
 
-Start Claude Code with aqua as an MCP server:
+To quickly try with Claude Code:
 
 ```bash
-claude --mcp-config '{"mcpServers":{"aqua":{"command":"npx","args":["@aquaqa/cli","mcp-server"]}}}'
+claude --mcp-config '{"mcpServers":{"aqua":{"command":"npx","args":["@aquaqa/cli","mcp-server"]}}}' --allowedTools 'mcp__aqua__*'
 ```
+
+## Architecture
+
+```text
+AI Agent (Claude Code, etc.)
+  ↕ MCP Protocol (stdio)
+@aquaqa/cli (this package)    ← MCP server + test execution engine
+  ↕ HTTP REST API
+aqua Server                   ← data persistence & API
+```
+
+The CLI embeds two test drivers:
+
+- **HTTP Driver** — sends HTTP requests and validates responses
+- **Browser Driver** — automates browsers via Playwright (navigate, click, fill, screenshot, iframe switching, etc.)
 
 ## CLI Commands
 
@@ -81,7 +60,7 @@ claude --mcp-config '{"mcpServers":{"aqua":{"command":"npx","args":["@aquaqa/cli
 Authenticate with the aqua server.
 
 ```bash
-aqua-cli login [--server-url <url>] [--force]
+aqua-cli login [--force]
 ```
 
 - `--force` — re-authenticate even if credentials already exist
@@ -99,7 +78,7 @@ aqua-cli logout
 Initialize project configuration: select organization and project.
 
 ```bash
-aqua-cli init [--server-url <url>]
+aqua-cli init
 ```
 
 ### `aqua-cli whoami`
