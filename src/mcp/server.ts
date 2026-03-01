@@ -16,6 +16,8 @@ import { registerExplorationTools } from "./tools/exploration.js";
 import { registerExplorationLogTools } from "./tools/exploration-log.js";
 import { cleanupAllExplorationLogs } from "../exploration/log.js";
 
+declare const __CLI_VERSION__: string;
+
 export async function startMCPServer(
   serverURL: string,
   apiKey?: string | null,
@@ -58,7 +60,7 @@ export async function startMCPServer(
   const server = new McpServer(
     {
       name: "aqua",
-      version: "0.1.0",
+      version: __CLI_VERSION__,
     },
     {
       instructions: `aqua is a QA planning and execution service for AI agents.
