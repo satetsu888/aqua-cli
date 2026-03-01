@@ -1,5 +1,7 @@
 # @aquaqa/cli
 
+[日本語 README](./README.ja.md)
+
 CLI and MCP Server for **aqua** — a QA planning and execution service designed for AI agents.
 
 aqua lets AI agents (such as Claude Code) create QA test plans and execute them via HTTP and browser automation. This package provides the CLI tool and [MCP](https://modelcontextprotocol.io/) server that acts as the bridge between AI agents and the aqua backend.
