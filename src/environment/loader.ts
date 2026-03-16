@@ -5,6 +5,7 @@ import { getProjectRoot } from "../config/projectRoot.js";
 import { environmentFileSchema } from "./types.js";
 import type { EnvironmentFile, ResolvedEnvironment, SecretEntry, ResolvedProxyConfig } from "./types.js";
 import { getResolver, type ProviderConfig } from "./resolver-registry.js";
+import { getCachedSecret, setCachedSecret } from "./secret-cache.js";
 
 /**
  * Load and resolve an environment file by name.
@@ -64,11 +65,17 @@ async function resolveSecretEntry(
       return envValue;
     }
     default: {
+      const providerConfig = secretProviders?.[entry.type];
+      const cached = getCachedSecret(entry, providerConfig);
+      if (cached !== undefined) return cached;
+
       const resolver = getResolver(entry.type);
       if (!resolver) {
         throw new Error(`Unknown secret type: "${entry.type}" in ${context}`);
       }
-      return resolver.resolve(entry, context, secretProviders?.[entry.type]);
+      const resolved = await resolver.resolve(entry, context, providerConfig);
+      setCachedSecret(entry, providerConfig, resolved);
+      return resolved;
     }
   }
 }

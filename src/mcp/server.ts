@@ -15,6 +15,7 @@ import { registerProgressTools } from "./tools/progress.js";
 import { registerExplorationTools } from "./tools/exploration.js";
 import { registerExplorationLogTools } from "./tools/exploration-log.js";
 import { cleanupAllExplorationLogs } from "../exploration/log.js";
+import { warmSecretCache } from "../environment/index.js";
 
 declare const __CLI_VERSION__: string;
 
@@ -55,6 +56,23 @@ export async function startMCPServer(
       process.exit(1);
     }
     throw err;
+  }
+
+  // Pre-resolve external secrets from environment files
+  try {
+    const cacheResult = await warmSecretCache();
+    if (cacheResult.resolved > 0) {
+      process.stderr.write(
+        `Pre-resolved ${cacheResult.resolved} secret(s) from environment files.\n`
+      );
+    }
+    if (cacheResult.failed > 0) {
+      process.stderr.write(
+        `Warning: ${cacheResult.failed} secret(s) could not be pre-resolved (will retry at execution time).\n`
+      );
+    }
+  } catch {
+    // Secret cache warmup failure should not block MCP startup
   }
 
   const server = new McpServer(

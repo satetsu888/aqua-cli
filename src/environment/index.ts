@@ -27,3 +27,4 @@ export type {
 } from "./types.js";
 export type { ExternalSecretResolver } from "./resolver-registry.js";
 export { registerResolver, getResolver, getAllResolvers } from "./resolver-registry.js";
+export { warmSecretCache, clearSecretCache } from "./secret-cache.js";

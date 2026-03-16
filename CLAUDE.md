@@ -49,6 +49,7 @@ cli/
 │   ├── environment/           # 環境設定の読み込み・解決
 │   │   ├── types.ts           # EnvironmentFile 型定義 + zod スキーマ
 │   │   ├── loader.ts          # ファイル読み込み・secrets 解決・バリデーション
+│   │   ├── secret-cache.ts    # 外部シークレットのオンメモリキャッシュ（MCP起動時に事前解決）
 │   │   ├── resolver-registry.ts # ExternalSecretResolver インターフェース + レジストリ
 │   │   ├── op-resolver.ts     # 1Password CLI (op) 連携
 │   │   ├── aws-sm-resolver.ts # AWS Secrets Manager 連携
@@ -355,6 +356,7 @@ QA Plan 内の `{{variable}}` は実行時の environment で展開される（`
 - `secret_providers`: 外部リゾルバのプロバイダーレベル設定。各 type のデフォルトを環境単位で定義（`hcv.address`, `aws_sm.region`/`aws_sm.profile`, `gcp_sm.project` 等）。エントリレベルのフィールドが優先。プロセス環境変数（`VAULT_ADDR` 等）へのフォールバックもあるが、MCP サーバー経由では `secret_providers` で設定するのが推奨
 - 外部 CLI ベースの type（`op`, `aws_sm`, `gcp_sm`, `hcv`）がある場合、実行前に CLI の存在を自動チェックする
 - secrets の解決はプランが参照する変数のみに限定される（`collectVariableReferences` でプランを静的解析し、`loadEnvironment` / `resolveEnvironment` の `requiredKeys` パラメータでフィルタ）。プランが使わない外部 type の secret があっても CLI ログインは不要
+- **シークレットキャッシュ**: MCP サーバー起動時に全環境ファイルの外部シークレット（op, aws_sm, gcp_sm, hcv）を事前解決してオンメモリにキャッシュする（`secret-cache.ts`）。execution 時にはキャッシュを優先利用し、キャッシュミス（起動後に追加された環境ファイル等）はその場で解決してキャッシュに追加。起動時の解決エラーはスキップし、execution 時にリトライされる。CLI 直接実行時はキャッシュなしで通常通り動作
 - `proxy`: HTTP リクエスト・ブラウザアクセスに使用するプロキシ設定（optional）。`server` はプロキシ URL、`bypass` はバイパスドメイン（カンマ区切り）、`username`/`password` は SecretEntry 形式の認証情報（optional）。HTTP Driver は undici ProxyAgent、Browser Driver は Playwright の newContext proxy オプションで適用
   - `ca_cert_path`（optional）: 接続先サーバー用の CA 証明書ファイルパス。自己署名証明書を使う接続先や SSL インターセプト proxy 環境で使用。HTTP Driver では `requestTls.ca` に適用
   - `proxy_ca_cert_path`（optional）: proxy サーバー用の CA 証明書ファイルパス。HTTPS proxy が自己署名証明書を使う場合に使用。HTTP Driver では `proxyTls.ca` に適用

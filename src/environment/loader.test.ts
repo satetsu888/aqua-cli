@@ -4,6 +4,7 @@ import { registerResolver, getResolver } from "./resolver-registry.js";
 import type { ExternalSecretResolver } from "./resolver-registry.js";
 import type { EnvironmentFile } from "./types.js";
 import { readFileSync } from "node:fs";
+import { setCachedSecret, clearSecretCache } from "./secret-cache.js";
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
@@ -214,6 +215,42 @@ describe("resolveEnvironment", () => {
         expect.any(String),
         { region: "eu-west-1", profile: "staging" },
       );
+    });
+
+    it("uses cached value instead of calling resolver", async () => {
+      const entry = { type: "aws_sm" as const, value: "cached-secret" };
+      setCachedSecret(entry, undefined, "cached-resolved-value");
+
+      const envFile: EnvironmentFile = {
+        secrets: {
+          s: entry,
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.variables.s).toBe("cached-resolved-value");
+      expect(mockResolve).not.toHaveBeenCalled();
+
+      clearSecretCache();
+    });
+
+    it("caches resolved value after calling resolver", async () => {
+      clearSecretCache();
+      mockResolve.mockResolvedValue("freshly-resolved");
+      const envFile: EnvironmentFile = {
+        secrets: {
+          s: { type: "aws_sm", value: "new-secret" },
+        },
+      };
+      await resolveEnvironment(envFile);
+
+      // Second call should use cache
+      mockResolve.mockReset();
+      mockCheckAvailable.mockResolvedValue(true);
+      const result2 = await resolveEnvironment(envFile);
+      expect(result2.variables.s).toBe("freshly-resolved");
+      expect(mockResolve).not.toHaveBeenCalled();
+
+      clearSecretCache();
     });
 
     it("passes undefined providerConfig when secret_providers is not set", async () => {
