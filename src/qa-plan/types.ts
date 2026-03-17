@@ -15,11 +15,33 @@ export interface Scenario {
   steps: Step[];
 }
 
+// --- Step Condition Schema ---
+
+export const StepConditionSchema = z.object({
+  variable_equals: z.object({
+    name: z.string().describe("Variable name to check"),
+    value: z.string().describe("Expected value"),
+  }).optional(),
+  variable_not_equals: z.object({
+    name: z.string().describe("Variable name to check"),
+    value: z.string().describe("Value that should not match"),
+  }).optional(),
+}).refine(
+  (data) => {
+    const keys = [data.variable_equals, data.variable_not_equals].filter(Boolean);
+    return keys.length === 1;
+  },
+  { message: "Exactly one condition type must be specified" }
+);
+
+export type StepCondition = z.infer<typeof StepConditionSchema>;
+
 export interface Step {
   id: string; // server-generated ID
   step_key: string; // user-defined identifier
   action: "http_request" | "browser";
   depends_on?: string[]; // references step_keys
+  condition?: StepCondition; // conditional execution based on variable values
   config: HttpRequestConfig | BrowserConfig;
   assertions?: Assertion[];
   extract?: Record<string, string>; // variable_name -> json_path

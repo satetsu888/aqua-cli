@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveStepOrder, checkStepDependencies } from "./step-utils.js";
+import { resolveStepOrder, checkStepDependencies, evaluateCondition } from "./step-utils.js";
 import type { Step, StepResult } from "../qa-plan/types.js";
 
 function makeStep(overrides: Partial<Step> & { step_key: string }): Step {
@@ -144,5 +144,63 @@ describe("checkStepDependencies", () => {
     ]);
 
     expect(checkStepDependencies(step, completed)).toBe(false);
+  });
+});
+
+describe("evaluateCondition", () => {
+  describe("variable_equals", () => {
+    it("returns null when variable matches expected value", () => {
+      const result = evaluateCondition(
+        { variable_equals: { name: "status", value: "active" } },
+        { status: "active" }
+      );
+      expect(result).toBeNull();
+    });
+
+    it("returns message when variable does not match", () => {
+      const result = evaluateCondition(
+        { variable_equals: { name: "status", value: "active" } },
+        { status: "inactive" }
+      );
+      expect(result).toContain("Condition not met");
+      expect(result).toContain("'active'");
+      expect(result).toContain("'inactive'");
+    });
+
+    it("returns message when variable is undefined", () => {
+      const result = evaluateCondition(
+        { variable_equals: { name: "status", value: "active" } },
+        {}
+      );
+      expect(result).toContain("Condition not met");
+      expect(result).toContain("undefined");
+    });
+  });
+
+  describe("variable_not_equals", () => {
+    it("returns null when variable does not match", () => {
+      const result = evaluateCondition(
+        { variable_not_equals: { name: "status", value: "active" } },
+        { status: "inactive" }
+      );
+      expect(result).toBeNull();
+    });
+
+    it("returns null when variable is undefined", () => {
+      const result = evaluateCondition(
+        { variable_not_equals: { name: "status", value: "active" } },
+        {}
+      );
+      expect(result).toBeNull();
+    });
+
+    it("returns message when variable matches the excluded value", () => {
+      const result = evaluateCondition(
+        { variable_not_equals: { name: "status", value: "active" } },
+        { status: "active" }
+      );
+      expect(result).toContain("Condition not met");
+      expect(result).toContain("not equal");
+    });
   });
 });

@@ -4,7 +4,7 @@ import type { AquaClient, EnvironmentLayer, ProxyConfig } from "../api/client.js
 import type { ResolvedEnvironment, ResolvedProxyConfig } from "../environment/index.js";
 import { HttpDriver } from "./http.js";
 import { BrowserDriver, type BrowserStorageState } from "./browser.js";
-import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies } from "./step-utils.js";
+import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies, evaluateCondition } from "./step-utils.js";
 import { expandObject } from "../utils/template.js";
 import { Masker } from "../masking/index.js";
 import type { MaskContext } from "../masking/index.js";
@@ -287,6 +287,36 @@ export class QAPlanExecutor {
             errorMessage: "Dependency not met",
           });
           continue;
+        }
+
+        // Check step condition
+        if (step.condition) {
+          const conditionResult = evaluateCondition(step.condition, variables);
+          if (conditionResult !== null) {
+            const skippedResult: StepResult = {
+              stepKey: step.step_key,
+              scenarioName: scenario.name,
+              action: step.action,
+              status: "skipped",
+              errorMessage: conditionResult,
+              startedAt: new Date(),
+              finishedAt: new Date(),
+            };
+
+            if (recording) {
+              await this.reportStep(executionId, scenario.name, step, skippedResult);
+            }
+            results.push(skippedResult);
+            completedSteps.set(step.step_key, skippedResult);
+            onStepComplete?.({
+              scenarioName: scenario.name,
+              stepKey: step.step_key,
+              action: step.action,
+              status: "skipped",
+              errorMessage: conditionResult,
+            });
+            continue;
+          }
         }
 
         // Expand variables in step config

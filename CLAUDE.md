@@ -290,12 +290,19 @@ function createMockServer() {
 - `HttpRequestConfigSchema` - method, url, headers, body, timeout
 - `BrowserConfigSchema` - steps（goto, click, double_click, type, hover, select_option, check, uncheck, press, focus, wait_for_selector, wait_for_url, screenshot, set_header, upload_file の配列）, timeout_ms（ステップ全体のタイムアウト、デフォルト10秒）
 - `PollConfigSchema` - until（終了条件: status_code / json_path）, interval_ms, timeout_ms。`HttpRequestConfigSchema` の `poll` フィールドとして使用
+- `StepConditionSchema` - ステップの条件付き実行。`variable_equals`（変数が特定値と一致）/ `variable_not_equals`（変数が特定値と不一致）の2種類。ステップの `condition` フィールドとして使用
 
 ブラウザコンテキストはシナリオ単位で作成され、同一シナリオ内のステップ間でセッションが維持される。シナリオ間では Playwright の `storageState` により Cookie/localStorage が自動的に引き継がれる。
 
 ### シナリオの条件付き実行
 
 - **requires**: シナリオに `requires: ["db_url", "db_password"]` のように必要な変数名を指定可能。実行時に指定された変数が環境に存在しない場合、シナリオ全体をスキップ（全ステップが `status: "skipped"` で記録される）。環境ごとに利用可能な変数が異なるケース（例: ローカルでは DB 接続可能だが production では不可）に対応
+
+### ステップの条件付き実行
+
+- **condition**: ステップに `condition` フィールドで条件付き実行を指定可能。前ステップの `extract` で取得した変数値に基づいてステップの実行を制御する。条件不一致時はステップをスキップ。独立した前準備ステップ等で使用
+  - `variable_equals` - 変数が特定の値と一致する場合のみ実行（`{ type: "variable_equals", variable: "status", value: "active" }`）
+  - `variable_not_equals` - 変数が特定の値と一致しない場合のみ実行（`{ type: "variable_not_equals", variable: "status", value: "active" }`）
 
 ### シナリオ横断の状態共有
 

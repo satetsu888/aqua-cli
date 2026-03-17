@@ -6,6 +6,7 @@ import {
   AssertionSchema,
   HttpRequestConfigSchema,
   BrowserConfigSchema,
+  StepConditionSchema,
 } from "../../qa-plan/types.js";
 import { unescapeUnicode } from "../sanitize.js";
 
@@ -43,6 +44,11 @@ export const stepCommonFields = {
     .optional()
     .describe(
       "Step keys this step depends on (can reference steps from any scenario). If any dependency step is not passed, this step will be skipped."
+    ),
+  condition: StepConditionSchema
+    .optional()
+    .describe(
+      "Conditional execution based on variable values. Use variable_equals or variable_not_equals to check a variable extracted from a previous step. If the condition is not met, the step is skipped. Example: { variable_equals: { name: 'item_status', value: 'active' } }"
     ),
 };
 

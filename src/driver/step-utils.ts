@@ -1,4 +1,4 @@
-import type { Step, StepResult } from "../qa-plan/types.js";
+import type { Step, StepCondition, StepResult } from "../qa-plan/types.js";
 
 /**
  * depends_on に基づくトポロジカルソート。
@@ -41,6 +41,31 @@ export function checkStepDependencies(
     const depResult = completedSteps.get(depKey);
     return depResult && depResult.status === "passed";
   });
+}
+
+/**
+ * ステップの condition を評価する。
+ * 条件が成立すれば null を返し、不成立ならスキップ理由のメッセージを返す。
+ */
+export function evaluateCondition(
+  condition: StepCondition,
+  variables: Record<string, string>
+): string | null {
+  if (condition.variable_equals) {
+    const { name, value } = condition.variable_equals;
+    const actual = variables[name];
+    if (actual === value) return null;
+    return `Condition not met: variable '${name}' expected to equal '${value}' (actual: ${actual === undefined ? "undefined" : `'${actual}'`})`;
+  }
+
+  if (condition.variable_not_equals) {
+    const { name, value } = condition.variable_not_equals;
+    const actual = variables[name];
+    if (actual !== value) return null;
+    return `Condition not met: variable '${name}' expected to not equal '${value}'`;
+  }
+
+  return "Invalid condition: no recognized condition type";
 }
 
 /**
