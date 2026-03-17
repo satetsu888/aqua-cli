@@ -158,31 +158,38 @@ export async function warmSecretCache(): Promise<{
     }
   }
 
+  const results = await Promise.allSettled(
+    toResolve.map(async ({ entry, context, providerConfig }) => {
+      if (!availableTypes.has(entry.type)) {
+        throw new Error("type_unavailable");
+      }
+
+      const resolver = getResolver(entry.type);
+      if (!resolver) {
+        throw new Error("no_resolver");
+      }
+
+      const value = await resolver.resolve(entry, context, providerConfig);
+      setCachedSecret(entry, providerConfig, value);
+    })
+  );
+
   let resolved = 0;
   let failed = 0;
 
-  for (const { entry, context, providerConfig } of toResolve) {
-    if (!availableTypes.has(entry.type)) {
-      failed++;
-      continue;
-    }
-
-    const resolver = getResolver(entry.type);
-    if (!resolver) {
-      failed++;
-      continue;
-    }
-
-    try {
-      const value = await resolver.resolve(entry, context, providerConfig);
-      setCachedSecret(entry, providerConfig, value);
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === "fulfilled") {
       resolved++;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(
-        `Warning: Failed to pre-resolve ${context}: ${message}\n`
-      );
+    } else {
       failed++;
+      const message = result.reason?.message ?? String(result.reason);
+      if (message !== "type_unavailable" && message !== "no_resolver") {
+        const context = toResolve[i].context;
+        process.stderr.write(
+          `Warning: Failed to pre-resolve ${context}: ${message}\n`
+        );
+      }
     }
   }
 
