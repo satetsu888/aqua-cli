@@ -89,6 +89,13 @@ npm test               # vitest run（全テスト実行）
 npx tsc --noEmit       # 型チェック
 ```
 
+## リリース
+
+1. `package.json` の `version` を更新してコミット
+2. `git tag v<version>`（例: `git tag v0.3.0`）
+3. `git push origin v<version>` でタグをプッシュ
+4. GitHub Actions（`.github/workflows/release.yml`）が自動で npm publish を実行（型チェック・ビルド・テスト通過後に `--provenance --access public` で公開）
+
 ## テスト
 
 Vitest を使用。全テストはユニットテストで、外部依存はすべてモック化されている。
