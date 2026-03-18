@@ -4,6 +4,7 @@ import * as credentials from "../config/credentials.js";
 
 vi.mock("../config/credentials.js", () => ({
   getCredential: vi.fn(),
+  resolveCredential: vi.fn(),
   setCredential: vi.fn(),
 }));
 
@@ -138,13 +139,14 @@ describe("ensureCredential", () => {
     vi.stubGlobal("fetch", mockFetch);
     mockFetch.mockReset();
     vi.mocked(credentials.getCredential).mockReset();
+    vi.mocked(credentials.resolveCredential).mockReset();
     vi.mocked(credentials.setCredential).mockReset();
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   it("returns existing credential when present", () => {
-    vi.mocked(credentials.getCredential).mockReturnValue({
+    vi.mocked(credentials.resolveCredential).mockReturnValue({
       api_key: "key1",
       user_id: "u1",
     });
@@ -153,11 +155,20 @@ describe("ensureCredential", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it("returns credential from AQUA_API_KEY env var", () => {
+    vi.mocked(credentials.resolveCredential).mockReturnValue({
+      api_key: "env-key",
+      user_id: "",
+    });
+    const result = ensureCredential("http://localhost:9080");
+    expect(result).toEqual({ api_key: "env-key", user_id: "" });
+  });
+
   it("throws error when no credential exists", () => {
-    vi.mocked(credentials.getCredential).mockReturnValue(null);
+    vi.mocked(credentials.resolveCredential).mockReturnValue(null);
 
     expect(() => ensureCredential("http://localhost:9080")).toThrow(
-      "Not logged in. Run 'aqua-cli login' first to authenticate."
+      "Not logged in. Run 'aqua-cli login' first or set AQUA_API_KEY environment variable."
     );
   });
 });

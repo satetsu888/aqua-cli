@@ -2,7 +2,7 @@ import { AquaClient } from "../api/client.js";
 import { QAPlanExecutor, type ExecutionSummary, type OnStepCompleteCallback } from "../driver/executor.js";
 import { loadEnvironment, listEnvironments } from "../environment/index.js";
 import { collectVariableReferences } from "../utils/template.js";
-import { getCredential } from "../config/credentials.js";
+import { resolveCredential } from "../config/credentials.js";
 import { loadConfig, resolveServerURL } from "../config/index.js";
 import { promptSelect, closePrompts } from "../setup/prompts.js";
 import type { QAPlanData, Scenario, Step } from "../qa-plan/types.js";
@@ -116,9 +116,9 @@ export async function runExecute(
   opts: RunExecuteOptions
 ): Promise<void> {
   const serverUrl = resolveServerURL();
-  const credential = getCredential(serverUrl);
+  const credential = resolveCredential(serverUrl);
   if (!credential) {
-    console.error("Not logged in. Run `aqua-cli login` first.");
+    console.error("Not logged in. Run `aqua-cli login` first or set AQUA_API_KEY environment variable.");
     process.exit(1);
   }
 

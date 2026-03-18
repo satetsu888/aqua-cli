@@ -188,7 +188,8 @@ function createMockServer() {
 ### 認証フロー
 
 - `aqua-cli login` でブラウザ認証を行う
-- `aqua-cli init` / `aqua-cli mcp-server` は事前ログインが必要（未ログイン時はエラー）
+- `AQUA_API_KEY` 環境変数でも認証可能（CI/CD 環境向け。`~/.aqua/credentials.json` より優先される）
+- `aqua-cli init` / `aqua-cli mcp-server` は事前ログインまたは `AQUA_API_KEY` 環境変数が必要（いずれもない場合はエラー）
 - 認証情報はユーザーレベル（`~/.aqua/credentials.json`）、プロジェクト設定はプロジェクトレベル（`.aqua/config.json`）
 
 ### プロジェクト識別

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getCredential,
+  resolveCredential,
   setCredential,
   removeCredential,
   loadCredentials,
@@ -106,6 +107,40 @@ describe("credentials", () => {
         api_key: "key1",
         user_id: "u1",
       });
+    });
+  });
+
+  describe("resolveCredential", () => {
+    it("returns credential from AQUA_API_KEY env var when set", () => {
+      process.env.AQUA_API_KEY = "env-api-key-123";
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          "http://localhost:9080": { api_key: "file-key", user_id: "u1" },
+        })
+      );
+      const cred = resolveCredential("http://localhost:9080");
+      expect(cred).toEqual({ api_key: "env-api-key-123", user_id: "" });
+      delete process.env.AQUA_API_KEY;
+    });
+
+    it("falls back to credentials file when AQUA_API_KEY is not set", () => {
+      delete process.env.AQUA_API_KEY;
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          "http://localhost:9080": { api_key: "file-key", user_id: "u1" },
+        })
+      );
+      const cred = resolveCredential("http://localhost:9080");
+      expect(cred).toEqual({ api_key: "file-key", user_id: "u1" });
+    });
+
+    it("returns null when neither env var nor file credential exists", () => {
+      delete process.env.AQUA_API_KEY;
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+      expect(resolveCredential("http://unknown")).toBeNull();
     });
   });
 

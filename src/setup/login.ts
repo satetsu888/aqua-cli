@@ -1,6 +1,7 @@
 import pc from "picocolors";
 import {
   getCredential,
+  resolveCredential,
   setCredential,
   ServerCredential,
 } from "../config/credentials.js";
@@ -36,17 +37,18 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
 /**
  * Returns existing credential or throws an error if not logged in.
+ * Checks AQUA_API_KEY environment variable first, then credentials file.
  */
 export function ensureCredential(
   url: string
 ): ServerCredential {
-  const existing = getCredential(url);
+  const existing = resolveCredential(url);
   if (existing) {
     return existing;
   }
 
   throw new Error(
-    "Not logged in. Run 'aqua-cli login' first to authenticate."
+    "Not logged in. Run 'aqua-cli login' first or set AQUA_API_KEY environment variable."
   );
 }
 

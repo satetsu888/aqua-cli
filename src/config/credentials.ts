@@ -35,6 +35,21 @@ export function getCredential(serverURL: string): ServerCredential | null {
   return store[normalized] ?? null;
 }
 
+/**
+ * Resolve credential with priority:
+ * 1. AQUA_API_KEY environment variable
+ * 2. ~/.aqua/credentials.json
+ *
+ * Returns null if neither is available.
+ */
+export function resolveCredential(serverURL: string): ServerCredential | null {
+  const envApiKey = process.env.AQUA_API_KEY;
+  if (envApiKey) {
+    return { api_key: envApiKey, user_id: "" };
+  }
+  return getCredential(serverURL);
+}
+
 export function setCredential(
   serverURL: string,
   credential: ServerCredential

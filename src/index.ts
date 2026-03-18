@@ -5,7 +5,7 @@ import {
   resolveServerURL,
   DEFAULT_SERVER_URL,
 } from "./config/index.js";
-import { getCredential, removeCredential } from "./config/credentials.js";
+import { getCredential, resolveCredential, removeCredential } from "./config/credentials.js";
 import { runLogin } from "./setup/login.js";
 import { runInit } from "./setup/init.js";
 import { runExecute } from "./commands/execute.js";
@@ -61,9 +61,9 @@ program
   .description("Show the currently authenticated user")
   .action(async () => {
     const url = resolveServerURL();
-    const credential = getCredential(url);
+    const credential = resolveCredential(url);
     if (!credential) {
-      console.error("Not logged in. Run `aqua-cli login` first.");
+      console.error("Not logged in. Run `aqua-cli login` first or set AQUA_API_KEY environment variable.");
       process.exit(1);
     }
 
@@ -136,10 +136,10 @@ program
   .description("Open the web UI in your browser (requires login)")
   .action(async () => {
     const url = resolveServerURL();
-    const credential = getCredential(url);
+    const credential = resolveCredential(url);
     if (!credential) {
       console.error(
-        "Not logged in. Run `aqua login` first."
+        "Not logged in. Run `aqua-cli login` first or set AQUA_API_KEY environment variable."
       );
       process.exit(1);
     }
@@ -174,7 +174,7 @@ program
   .description("Start the MCP server for AI agent integration")
   .action(async () => {
     const serverURL = resolveServerURL();
-    const credential = getCredential(serverURL);
+    const credential = resolveCredential(serverURL);
     const config = loadConfig();
     await startMCPServer(serverURL, credential?.api_key, config);
   });

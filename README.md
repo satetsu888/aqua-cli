@@ -223,6 +223,8 @@ Interactive exploration session for discovering page structure, CSS selectors, a
 
 Stores server authentication credentials (per server URL). Managed by `aqua-cli login` / `aqua-cli logout`.
 
+If the `AQUA_API_KEY` environment variable is set, it takes precedence over the credentials file. This is useful for CI/CD environments where browser-based login is not available.
+
 ### `.aqua/config.json`
 
 ```json
@@ -330,6 +332,7 @@ Secrets are resolved locally at execution time. Only secrets actually referenced
 
 | Variable | Description |
 |----------|-------------|
+| `AQUA_API_KEY` | API key for authentication. Takes precedence over `~/.aqua/credentials.json`. Useful for CI/CD. |
 | `AQUA_SERVER_URL` | Override the server URL |
 
 ## License
