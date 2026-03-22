@@ -67,9 +67,8 @@ describe("runInit", () => {
     mockClient = {
       listOrganizations: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(AquaClient).mockImplementation(function () {
-      return mockClient as unknown as AquaClient;
-    } as unknown as typeof AquaClient);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(AquaClient).mockImplementation((() => mockClient) as any);
 
     vi.mocked(login.ensureCredential).mockReturnValue({
       api_key: "test-key",
