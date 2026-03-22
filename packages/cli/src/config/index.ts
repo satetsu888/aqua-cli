@@ -5,6 +5,7 @@ import { getProjectRoot } from "./projectRoot.js";
 export interface AquaConfig {
   server_url: string;
   project_key?: string;
+  plugins?: string[];
   /** @deprecated Use project_key instead. Kept for migration from old config format. */
   organization_id?: string;
   /** @deprecated Use project_key instead. Kept for migration from old config format. */

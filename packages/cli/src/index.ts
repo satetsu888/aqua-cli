@@ -10,6 +10,7 @@ import { runLogin } from "./setup/login.js";
 import { runInit } from "./setup/init.js";
 import { runExecute } from "./commands/execute.js";
 import { runRecord } from "./commands/record.js";
+import { runPluginAdd, runPluginRemove, runPluginList } from "./commands/plugin.js";
 import { AquaClient } from "./api/client.js";
 
 declare const __CLI_VERSION__: string;
@@ -167,6 +168,31 @@ program
       console.error(`Failed to create exchange token: ${(err as Error).message}`);
       process.exit(1);
     }
+  });
+
+const pluginCmd = program
+  .command("plugin")
+  .description("Manage plugins");
+
+pluginCmd
+  .command("add <package>")
+  .description("Install a plugin and add it to .aqua/config.json")
+  .action(async (packageName: string) => {
+    await runPluginAdd(packageName);
+  });
+
+pluginCmd
+  .command("remove <package>")
+  .description("Remove a plugin from .aqua/config.json and uninstall it")
+  .action(async (packageName: string) => {
+    await runPluginRemove(packageName);
+  });
+
+pluginCmd
+  .command("list")
+  .description("List configured plugins")
+  .action(() => {
+    runPluginList();
   });
 
 program

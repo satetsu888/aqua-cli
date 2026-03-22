@@ -10,8 +10,8 @@ export async function loadPlugins(
   registry: PluginRegistry
 ): Promise<void> {
   const config = loadConfig();
-  const plugins = (config as Record<string, unknown> | null)?.plugins;
-  if (!Array.isArray(plugins) || plugins.length === 0) return;
+  const plugins = config?.plugins;
+  if (!plugins || plugins.length === 0) return;
 
   for (const pluginName of plugins) {
     if (typeof pluginName !== "string") continue;

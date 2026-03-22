@@ -113,6 +113,26 @@ aqua-cli record [url]
 
 出力は `update_qa_plan`、`create_common_scenario`、`run_scenario` にそのまま使用できます。
 
+### `aqua-cli plugin`
+
+プラグインの管理。カスタムアクション型で aqua を拡張できます。
+
+```bash
+aqua-cli plugin add <package>      # プラグインをインストールして設定に追加
+aqua-cli plugin remove <package>   # プラグインを設定から削除してアンインストール
+aqua-cli plugin list               # 設定済みプラグインの一覧表示
+```
+
+- `add` — `npm install` を実行し、`.aqua/config.json` の `plugins` 配列に追加
+- `remove` — `.aqua/config.json` から削除し、`npm uninstall` を実行
+- `list` — 設定済みプラグインを表示
+
+例:
+
+```bash
+aqua-cli plugin add @aquaqa/stripe-plugin
+```
+
 ### `aqua-cli web`
 
 Web UI をブラウザで開きます（ログインが必要）。

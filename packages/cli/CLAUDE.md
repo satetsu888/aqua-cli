@@ -91,6 +91,9 @@ src/
 - `aqua-cli init` - プロジェクト設定（git remote から `project_key` を自動生成）。`.aqua/config.json` に `server_url` と `project_key` を保存。事前に `aqua-cli login` が必要
 - `aqua-cli execute <qa_plan_id>` - QA Plan を直接実行。MCP を通さずにテスト実行可能。`--env <name>` で環境指定（省略時はインタラクティブ選択）、`--plan-version <n>` でバージョン指定、`--var key=value` で変数オーバーライド（複数可）。実行開始直後に Web UI の URL を表示し、結果はシナリオ単位の階層構造で出力
 - `aqua-cli record [url]` - Playwright codegen でブラウザ操作を記録。ブラウザが開き、ユーザーが操作。ブラウザを閉じると BrowserStep[] の JSON を stdout に出力。ログイン不要
+- `aqua-cli plugin add <package>` - プラグインをインストールし `.aqua/config.json` に追加
+- `aqua-cli plugin remove <package>` - プラグインを `.aqua/config.json` から削除しアンインストール
+- `aqua-cli plugin list` - 設定済みプラグインの一覧表示
 - `aqua-cli mcp-server` - MCP サーバーを起動。事前に `aqua-cli login` が必要
 
 ### 認証フロー

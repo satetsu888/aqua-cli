@@ -68,7 +68,7 @@ describe("loadPlugins", () => {
     vi.mocked(loadConfig).mockReturnValue({
       server_url: "http://localhost:9080",
       plugins: [123, null, undefined],
-    } as ReturnType<typeof loadConfig>);
+    } as unknown as ReturnType<typeof loadConfig>);
 
     const registry = new PluginRegistry();
     await loadPlugins(registry);

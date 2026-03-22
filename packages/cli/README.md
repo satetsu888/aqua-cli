@@ -115,6 +115,26 @@ aqua-cli record [url]
 
 The output can be used directly with `update_qa_plan`, `create_common_scenario`, or `run_scenario`.
 
+### `aqua-cli plugin`
+
+Manage plugins for extending aqua with custom action types.
+
+```bash
+aqua-cli plugin add <package>      # Install and configure a plugin
+aqua-cli plugin remove <package>   # Remove and uninstall a plugin
+aqua-cli plugin list               # List configured plugins
+```
+
+- `add` — runs `npm install` and adds the package to `.aqua/config.json` `plugins` array
+- `remove` — removes from `.aqua/config.json` and runs `npm uninstall`
+- `list` — shows all configured plugins
+
+Example:
+
+```bash
+aqua-cli plugin add @aquaqa/stripe-plugin
+```
+
 ### `aqua-cli web`
 
 Open the web UI in your browser (requires login).
