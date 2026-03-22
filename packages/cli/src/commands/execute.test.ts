@@ -155,7 +155,8 @@ describe("executeQAPlan", () => {
       undefined,
       undefined,
       undefined,
-      false
+      false,
+      undefined
     );
   });
 
@@ -179,7 +180,8 @@ describe("executeQAPlan", () => {
       "staging",
       undefined,
       undefined,
-      false
+      false,
+      undefined
     );
   });
 
@@ -199,7 +201,8 @@ describe("executeQAPlan", () => {
       undefined,
       onCreated,
       undefined,
-      false
+      false,
+      undefined
     );
   });
 

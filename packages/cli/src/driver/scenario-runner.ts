@@ -2,6 +2,7 @@ import type { Scenario, Step, StepResult, BrowserConfig } from "../qa-plan/types
 import { VIEWPORT_PRESETS } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/index.js";
 import type { StepCompleteEvent, OnStepCompleteCallback } from "./executor.js";
+import type { PluginRegistry } from "../plugin/registry.js";
 import { HttpDriver } from "./http.js";
 import { BrowserDriver } from "./browser.js";
 import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies, evaluateCondition } from "./step-utils.js";
@@ -22,9 +23,11 @@ export interface ScenarioRunResult {
 export class ScenarioRunner {
   private httpDriver: HttpDriver;
   private proxyConfig?: ResolvedProxyConfig;
+  private pluginRegistry?: PluginRegistry;
 
-  constructor(proxyConfig?: ResolvedProxyConfig) {
+  constructor(proxyConfig?: ResolvedProxyConfig, pluginRegistry?: PluginRegistry) {
     this.proxyConfig = proxyConfig;
+    this.pluginRegistry = pluginRegistry;
     this.httpDriver = new HttpDriver(proxyConfig);
   }
 
@@ -159,16 +162,27 @@ export class ScenarioRunner {
           case "browser":
             result = await browserDriver!.execute(expandedStep, variables);
             break;
-          default:
+          default: {
+            // Try plugin registry for custom action types
+            if (this.pluginRegistry) {
+              const plugin = this.pluginRegistry.getPlugin(step.action);
+              if (plugin) {
+                const driver = await this.pluginRegistry.getOrCreateDriver(step.action, variables);
+                result = await driver.execute(expandedStep, variables);
+                break;
+              }
+            }
             result = {
               stepKey: step.step_key,
               scenarioName: scenario.name,
               action: step.action,
               status: "error",
-              errorMessage: `Unknown action: ${step.action}`,
+              errorMessage: `Unknown action: "${step.action}". Is the plugin installed and configured in .aqua/config.json?`,
               startedAt: new Date(),
               finishedAt: new Date(),
             };
+            break;
+          }
         }
 
         result.scenarioName = scenario.name;
@@ -219,6 +233,7 @@ export class ScenarioRunner {
       if (browserDriver) {
         await browserDriver.close();
       }
+      this.pluginRegistry?.clearDriverCache();
     }
 
     return this.buildResult(results, variables, masker);

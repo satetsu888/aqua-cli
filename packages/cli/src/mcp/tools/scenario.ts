@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AquaClient } from "../../api/client.js";
 import { ScenarioRunner } from "../../driver/scenario-runner.js";
+import type { PluginRegistry } from "../../plugin/registry.js";
 import { loadEnvironment } from "../../environment/index.js";
 import { collectVariableReferences } from "../../utils/template.js";
 import { Masker } from "../../masking/index.js";
@@ -21,6 +22,7 @@ const InlineScenarioSchema = z.object({
 export function registerScenarioTools(
   server: McpServer,
   client: AquaClient,
+  pluginRegistry?: PluginRegistry,
 ) {
   server.tool(
     "run_scenario",
@@ -143,7 +145,7 @@ Secrets are masked in the response for safety.`,
       const masker = new Masker(maskCtx);
 
       // Execute scenario
-      const runner = new ScenarioRunner(resolvedEnv?.proxy);
+      const runner = new ScenarioRunner(resolvedEnv?.proxy, pluginRegistry);
       let result;
       try {
         const progressToken = extra._meta?.progressToken;

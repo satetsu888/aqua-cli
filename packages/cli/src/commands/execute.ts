@@ -6,6 +6,7 @@ import { resolveCredential } from "../config/credentials.js";
 import { loadConfig, resolveServerURL } from "../config/index.js";
 import { promptSelect, closePrompts } from "../setup/prompts.js";
 import type { QAPlanData, Scenario, Step } from "../qa-plan/types.js";
+import type { PluginRegistry } from "../plugin/registry.js";
 
 export interface ExecuteQAPlanOptions {
   qaPlanId: string;
@@ -14,6 +15,7 @@ export interface ExecuteQAPlanOptions {
   vars?: Record<string, string>;
   onExecutionCreated?: (executionId: string, executionUrl: string) => void;
   onStepComplete?: OnStepCompleteCallback;
+  pluginRegistry?: PluginRegistry;
 }
 
 /**
@@ -100,7 +102,7 @@ export async function executeQAPlan(
 
   // Execute
   const executor = new QAPlanExecutor(client);
-  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated, opts.onStepComplete, skipRecording);
+  return executor.execute(planData, planVersion.id, vars, resolvedEnv, envName, opts.onExecutionCreated, opts.onStepComplete, skipRecording, opts.pluginRegistry);
 }
 
 // --- CLI command handler ---

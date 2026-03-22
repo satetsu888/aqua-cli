@@ -60,6 +60,12 @@ src/
 │   ├── rules.ts           # 各マスクルール実装
 │   ├── masker.ts          # ルール統括
 │   └── index.ts
+├── plugin/                # プラグインシステム
+│   ├── interface.ts       # AquaPlugin インターフェース + 型エクスポート
+│   ├── registry.ts        # PluginRegistry（登録・ドライバーキャッシュ）
+│   ├── loader.ts          # .aqua/config.json からプラグインを dynamic import
+│   ├── utils.ts           # 共有ユーティリティ（getJsonPath, extractValues）
+│   └── index.ts
 ├── qa-plan/
 │   └── types.ts           # Step/Assertion/Config の Zod スキーマ + 型定義
 └── utils/
@@ -224,3 +230,48 @@ src/
 サーバー送信前にシークレットをマスクするルールベースシステム:
 - SecretKeysRule, HttpAuthHeaderRule, HttpSetCookieRule, DomPasswordRule, SecretValueScanRule
 - `MaskRule` インターフェースを実装して `Masker` に登録すればルール追加が可能
+
+## プラグインシステム
+
+built-in の `http_request` / `browser` 以外のアクション型をプラグインとして追加可能。
+
+### AquaPlugin インターフェース
+
+プラグインは `AquaPlugin` インターフェースを実装した default export を持つ npm パッケージ:
+
+```typescript
+import type { AquaPlugin } from "@aquaqa/cli/plugin";
+
+const myPlugin: AquaPlugin = {
+  name: "@aquaqa/my-plugin",
+  actionType: "my_action",           // step.action に指定する名前
+  configSchema: MyConfigSchema,       // Zod スキーマ（MCP ツール説明に使用）
+  assertionSchemas: [MyAssertionSchema],
+  actionDescription: "説明テキスト",
+  async createDriver(variables) {     // Driver インスタンスを生成
+    return new MyDriver(variables.api_key);
+  },
+};
+export default myPlugin;
+```
+
+### プラグインの設定
+
+`.aqua/config.json` の `plugins` 配列にパッケージ名を追加:
+```jsonc
+{ "plugins": ["@aquaqa/stripe-plugin"] }
+```
+
+### 実行フロー
+
+1. MCP サーバー起動時に `loadPlugins()` で `.aqua/config.json` からプラグインを dynamic import
+2. `PluginRegistry` に登録
+3. ステップ実行時、built-in アクションに一致しない場合は `PluginRegistry` からドライバーを取得して実行
+4. ドライバーはシナリオ単位でキャッシュ（シナリオ終了時に `clearDriverCache()`）
+5. MCP instructions にプラグインアクション説明を動的追記
+
+### エクスポート
+
+プラグイン開発者向けに以下のサブパスをエクスポート:
+- `@aquaqa/cli/plugin` — `AquaPlugin`, `Driver`, `Step`, `StepResult`, `AssertionResultData` 型
+- `@aquaqa/cli/utils` — `getJsonPath()`, `extractValues()` ユーティリティ

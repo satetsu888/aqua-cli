@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AquaClient } from "../../api/client.js";
 import { executeQAPlan } from "../../commands/execute.js";
 import type { ExecutionSummary, StepCompleteEvent } from "../../driver/executor.js";
+import type { PluginRegistry } from "../../plugin/registry.js";
 function formatExecutionResult(
   planName: string,
   summary: ExecutionSummary
@@ -127,7 +128,8 @@ const backgroundExecutions = new Map<
 
 export function registerExecutionTools(
   server: McpServer,
-  client: AquaClient
+  client: AquaClient,
+  pluginRegistry?: PluginRegistry,
 ) {
   server.tool(
     "execute_qa_plan",
@@ -192,6 +194,7 @@ IMPORTANT: If execution fails, do NOT silently adjust the QA Plan to make it pas
             executionUrl = url;
           },
           onStepComplete: (event) => sendProgressNotification(extra, event),
+          pluginRegistry,
         });
 
         // Wait for execution creation (but not completion)
@@ -258,6 +261,7 @@ IMPORTANT: If execution fails, do NOT silently adjust the QA Plan to make it pas
           envName: env_name,
           vars: environment,
           onStepComplete: (event) => sendProgressNotification(extra, event),
+          pluginRegistry,
         });
       } catch (err) {
         return {

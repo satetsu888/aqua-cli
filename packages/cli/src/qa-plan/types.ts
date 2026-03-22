@@ -39,11 +39,13 @@ export type StepCondition = z.infer<typeof StepConditionSchema>;
 export interface Step {
   id: string; // server-generated ID
   step_key: string; // user-defined identifier
-  action: "http_request" | "browser";
+  action: string; // "http_request" | "browser" | plugin action types
   depends_on?: string[]; // references step_keys
   condition?: StepCondition; // conditional execution based on variable values
-  config: HttpRequestConfig | BrowserConfig;
-  assertions?: Assertion[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: HttpRequestConfig | BrowserConfig | Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  assertions?: Assertion[] | Record<string, any>[];
   extract?: Record<string, string>; // variable_name -> json_path
   sort_order: number;
 }

@@ -2,6 +2,7 @@ import type { QAPlanData, Scenario, Step, StepResult, BrowserConfig } from "../q
 import { VIEWPORT_PRESETS } from "../qa-plan/types.js";
 import type { AquaClient, EnvironmentLayer, ProxyConfig } from "../api/client.js";
 import type { ResolvedEnvironment, ResolvedProxyConfig } from "../environment/index.js";
+import type { PluginRegistry } from "../plugin/registry.js";
 import { HttpDriver } from "./http.js";
 import { BrowserDriver, type BrowserStorageState } from "./browser.js";
 import { resolveStepOrder, checkStepDependencies, checkBrowserDependencies, evaluateCondition } from "./step-utils.js";
@@ -51,6 +52,7 @@ export class QAPlanExecutor {
     onExecutionCreated?: (executionId: string, executionUrl: string) => void,
     onStepComplete?: OnStepCompleteCallback,
     skipRecording?: boolean,
+    pluginRegistry?: PluginRegistry,
   ): Promise<ExecutionSummary> {
     const recording = !skipRecording;
 
@@ -162,6 +164,7 @@ export class QAPlanExecutor {
             completedStepIndex++;
           },
           recording,
+          pluginRegistry,
         );
         allResults.push(...scenarioResult.results);
         browserStorageState = scenarioResult.browserStorageState ?? browserStorageState;
@@ -208,6 +211,7 @@ export class QAPlanExecutor {
     browserStorageState?: BrowserStorageState,
     onStepComplete?: (event: Omit<StepCompleteEvent, "index" | "totalSteps">) => void,
     recording = true,
+    pluginRegistry?: PluginRegistry,
   ): Promise<{ results: StepResult[]; browserStorageState?: BrowserStorageState }> {
     const results: StepResult[] = [];
 
@@ -344,16 +348,26 @@ export class QAPlanExecutor {
           case "browser":
             result = await browserDriver!.execute(expandedStep, variables);
             break;
-          default:
+          default: {
+            if (pluginRegistry) {
+              const plugin = pluginRegistry.getPlugin(step.action);
+              if (plugin) {
+                const driver = await pluginRegistry.getOrCreateDriver(step.action, variables);
+                result = await driver.execute(expandedStep, variables);
+                break;
+              }
+            }
             result = {
               stepKey: step.step_key,
               scenarioName: scenario.name,
               action: step.action,
               status: "error",
-              errorMessage: `Unknown action: ${step.action}`,
+              errorMessage: `Unknown action: "${step.action}". Is the plugin installed and configured in .aqua/config.json?`,
               startedAt: new Date(),
               finishedAt: new Date(),
             };
+            break;
+          }
         }
 
         result.scenarioName = scenario.name;
@@ -420,6 +434,7 @@ export class QAPlanExecutor {
         newBrowserStorageState = await browserDriver.getStorageState();
         await browserDriver.close();
       }
+      pluginRegistry?.clearDriverCache();
     }
 
     return { results, browserStorageState: newBrowserStorageState };

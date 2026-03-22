@@ -7,6 +7,7 @@ aqua の CLI / MCP Server モノレポ。npm workspaces で複数パッケージ
 | パッケージ | npm | 説明 |
 |---|---|---|
 | `packages/cli` | `@aquaqa/cli` | CLI ツール + MCP Server。テスト実行エンジン内蔵 |
+| `packages/stripe-plugin` | `@aquaqa/stripe-plugin` | Stripe プラグイン。Stripe リソースの状態確認 |
 
 ## リポジトリ構成
 
@@ -17,7 +18,8 @@ aqua-cli/
 │   ├── ci.yml                         # lint/build/test（全パッケージ）
 │   └── release.yml                    # Changesets + trusted publishing
 ├── packages/
-│   └── cli/                           # @aquaqa/cli（詳細は packages/cli/CLAUDE.md）
+│   ├── cli/                           # @aquaqa/cli（詳細は packages/cli/CLAUDE.md）
+│   └── stripe-plugin/                 # @aquaqa/stripe-plugin
 ├── package.json                       # ルート（private: true, workspaces）
 ├── tsconfig.base.json                 # 共有 TypeScript 設定
 └── package-lock.json

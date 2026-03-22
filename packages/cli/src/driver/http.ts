@@ -9,6 +9,7 @@ import type {
 } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/types.js";
 import { expandObject } from "../utils/template.js";
+import { getJsonPath } from "../plugin/utils.js";
 import { ProxyAgent } from "undici";
 import { parseBypassPatterns, shouldBypassProxy } from "./proxy-bypass.js";
 
@@ -366,23 +367,3 @@ export class HttpDriver implements Driver {
   }
 }
 
-/**
- * Simple JSONPath resolver. Supports $.foo.bar and $.foo[0].bar syntax.
- */
-function getJsonPath(obj: unknown, path: string): unknown {
-  const parts = path
-    .replace(/^\$\.?/, "")
-    .split(/\.|\[(\d+)\]/)
-    .filter(Boolean);
-
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    if (typeof current === "object") {
-      current = (current as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-  return current;
-}

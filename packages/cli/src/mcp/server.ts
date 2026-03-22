@@ -16,6 +16,7 @@ import { registerExplorationTools } from "./tools/exploration.js";
 import { registerExplorationLogTools } from "./tools/exploration-log.js";
 import { cleanupAllExplorationLogs } from "../exploration/log.js";
 import { warmSecretCache } from "../environment/index.js";
+import { PluginRegistry, loadPlugins } from "../plugin/index.js";
 
 declare const __CLI_VERSION__: string;
 
@@ -74,6 +75,19 @@ export async function startMCPServer(
   } catch {
     // Secret cache warmup failure should not block MCP startup
   }
+
+  // Load plugins from .aqua/config.json
+  const pluginRegistry = new PluginRegistry();
+  try {
+    await loadPlugins(pluginRegistry);
+    for (const plugin of pluginRegistry.getAllPlugins()) {
+      process.stderr.write(`Plugin loaded: ${plugin.name} (action: ${plugin.actionType})\n`);
+    }
+  } catch {
+    // Plugin loading failure should not block MCP startup
+  }
+
+  const pluginActionDescriptions = pluginRegistry.getActionDescriptions();
 
   const server = new McpServer(
     {
@@ -196,13 +210,16 @@ Reusable scenario templates stored at the project level. Use list_common_scenari
 
 ## Project Memory
 
-Each project can store a memory document for accumulating project knowledge learned through QA plan creation and execution — app architecture, authentication flows, effective UI selectors, and lessons learned. Use get_project_memory to review existing knowledge before creating QA plans. After executing plans, save any new insights with save_project_memory.`,
+Each project can store a memory document for accumulating project knowledge learned through QA plan creation and execution — app architecture, authentication flows, effective UI selectors, and lessons learned. Use get_project_memory to review existing knowledge before creating QA plans. After executing plans, save any new insights with save_project_memory.` +
+      (pluginActionDescriptions
+        ? `\n\n## Plugin Actions\n\nThe following plugin action types are available in addition to the built-in http_request and browser actions:\n${pluginActionDescriptions}`
+        : ""),
     }
   );
 
   registerQAPlanTools(server, client);
-  registerExecutionTools(server, client);
-  registerScenarioTools(server, client);
+  registerExecutionTools(server, client, pluginRegistry);
+  registerScenarioTools(server, client, pluginRegistry);
   registerCommonScenarioTools(server, client);
   registerEnvironmentTools(server);
   registerSetupTools(server, client, config);

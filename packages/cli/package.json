@@ -11,6 +11,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin/interface.d.ts",
+      "import": "./dist/plugin/interface.js"
+    },
+    "./utils": {
+      "types": "./dist/plugin/utils.d.ts",
+      "import": "./dist/plugin/utils.js"
     }
   },
   "files": [
@@ -59,8 +67,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsup": "^8.5.1",
-    "tsx": "^4.0.0",
-    "vitest": "^4.0.18"
+    "tsx": "^4.0.0"
   },
   "engines": {
     "node": ">=20.18.1"

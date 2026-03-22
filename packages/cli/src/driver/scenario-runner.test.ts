@@ -386,4 +386,107 @@ describe("ScenarioRunner", () => {
       expect(result.skipped).toBe(0);
     });
   });
+
+  describe("plugin action dispatch", () => {
+    it("delegates to plugin driver for unknown action types", async () => {
+      const mockPluginExecute = vi.fn().mockResolvedValue({
+        stepKey: "step1",
+        scenarioName: "",
+        action: "stripe",
+        status: "passed",
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      });
+
+      const mockRegistry = {
+        getPlugin: vi.fn().mockReturnValue({ name: "stripe-plugin" }),
+        getOrCreateDriver: vi.fn().mockResolvedValue({ execute: mockPluginExecute }),
+        clearDriverCache: vi.fn(),
+      };
+
+      const scenario = makeScenario({
+        steps: [
+          {
+            id: "sd1",
+            step_key: "step1",
+            action: "stripe",
+            config: { operation: "get_subscription", params: { id: "sub_123" } },
+            sort_order: 0,
+          },
+        ],
+      });
+
+      const runner = new ScenarioRunner(undefined, mockRegistry as never);
+      const result = await runner.run(scenario, { stripe_api_key: "sk_test" }, noopMasker());
+
+      expect(result.status).toBe("passed");
+      expect(result.passed).toBe(1);
+      expect(mockRegistry.getPlugin).toHaveBeenCalledWith("stripe");
+      expect(mockRegistry.getOrCreateDriver).toHaveBeenCalledWith(
+        "stripe",
+        expect.objectContaining({ stripe_api_key: "sk_test" }),
+      );
+      expect(mockPluginExecute).toHaveBeenCalled();
+    });
+
+    it("returns error for unknown action when no plugin registered", async () => {
+      const mockRegistry = {
+        getPlugin: vi.fn().mockReturnValue(undefined),
+        getOrCreateDriver: vi.fn(),
+        clearDriverCache: vi.fn(),
+      };
+
+      const scenario = makeScenario({
+        steps: [
+          {
+            id: "sd1",
+            step_key: "step1",
+            action: "unknown_action",
+            config: {},
+            sort_order: 0,
+          },
+        ],
+      });
+
+      const runner = new ScenarioRunner(undefined, mockRegistry as never);
+      const result = await runner.run(scenario, {}, noopMasker());
+
+      expect(result.status).toBe("error");
+      expect(result.errors).toBe(1);
+      expect(result.results[0].errorMessage).toContain("unknown_action");
+    });
+
+    it("returns error for unknown action when no plugin registry", async () => {
+      const scenario = makeScenario({
+        steps: [
+          {
+            id: "sd1",
+            step_key: "step1",
+            action: "nonexistent",
+            config: {},
+            sort_order: 0,
+          },
+        ],
+      });
+
+      const runner = new ScenarioRunner();
+      const result = await runner.run(scenario, {}, noopMasker());
+
+      expect(result.status).toBe("error");
+      expect(result.results[0].errorMessage).toContain("nonexistent");
+    });
+
+    it("clears plugin driver cache after scenario completes", async () => {
+      const mockRegistry = {
+        getPlugin: vi.fn().mockReturnValue(undefined),
+        getOrCreateDriver: vi.fn(),
+        clearDriverCache: vi.fn(),
+      };
+
+      const runner = new ScenarioRunner(undefined, mockRegistry as never);
+      await runner.run(makeScenario(), {}, noopMasker());
+
+      expect(mockRegistry.clearDriverCache).toHaveBeenCalled();
+    });
+  });
 });
