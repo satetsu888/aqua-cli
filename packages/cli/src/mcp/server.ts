@@ -217,10 +217,10 @@ Each project can store a memory document for accumulating project knowledge lear
     }
   );
 
-  registerQAPlanTools(server, client);
+  registerQAPlanTools(server, client, pluginRegistry);
   registerExecutionTools(server, client, pluginRegistry);
   registerScenarioTools(server, client, pluginRegistry);
-  registerCommonScenarioTools(server, client);
+  registerCommonScenarioTools(server, client, pluginRegistry);
   registerEnvironmentTools(server);
   registerSetupTools(server, client, config);
   registerMemoryTools(server, client);

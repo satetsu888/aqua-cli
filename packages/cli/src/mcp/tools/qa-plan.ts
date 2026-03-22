@@ -8,6 +8,7 @@ import {
   BrowserConfigSchema,
   StepConditionSchema,
 } from "../../qa-plan/types.js";
+import type { PluginRegistry } from "../../plugin/registry.js";
 import { unescapeUnicode } from "../sanitize.js";
 
 export const ASSERTIONS_DESCRIPTION = `Assertions to evaluate after step execution. Examples:
@@ -52,7 +53,7 @@ export const stepCommonFields = {
     ),
 };
 
-export const StepSchema = z.discriminatedUnion("action", [
+const BuiltinStepSchema = z.discriminatedUnion("action", [
   z.object({
     ...stepCommonFields,
     action: z.literal("http_request"),
@@ -65,24 +66,56 @@ export const StepSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-export const ScenarioSchema = z.object({
-  name: z.string().optional().describe("Scenario name (required unless common_scenario_id is specified)"),
-  requires: z.array(z.string()).optional().describe(
-    "Variable names required for this scenario to execute. If any listed variable is not available in the environment at execution time, the entire scenario will be skipped. Use this for environment-specific scenarios (e.g. DB tests that need db_url)."
-  ),
-  steps: z.array(StepSchema).optional().describe("Steps in this scenario (required unless common_scenario_id is specified)"),
-  common_scenario_id: z.string().optional().describe(
-    "ID of a common scenario to include. When specified, name/steps/requires default to the common scenario's values but can be overridden. Use list_common_scenarios to see available templates."
-  ),
-}).refine(
-  (data) => data.common_scenario_id || (data.name && data.steps && data.steps.length > 0),
-  { message: "Either common_scenario_id or both name and steps are required" }
-);
+/** Schema for plugin action steps (accepts any action string + arbitrary config) */
+const PluginStepSchema = z.object({
+  ...stepCommonFields,
+  action: z.string().describe("Plugin action type (e.g. stripe)"),
+  config: z.record(z.any()).describe("Plugin-specific configuration"),
+  assertions: z.array(z.record(z.any())).optional().describe("Plugin-specific assertions"),
+});
+
+/**
+ * Build a StepSchema that accepts both built-in and plugin actions.
+ * If no plugins are loaded, returns the built-in schema only.
+ */
+export function buildStepSchema(pluginRegistry?: PluginRegistry): z.ZodType {
+  if (!pluginRegistry || !pluginRegistry.hasPlugins()) {
+    return BuiltinStepSchema;
+  }
+
+  // Use z.union: try built-in schema first, fall back to plugin schema
+  return z.union([BuiltinStepSchema, PluginStepSchema]);
+}
+
+/** Default StepSchema (built-in actions only, for backward compatibility) */
+export const StepSchema = BuiltinStepSchema;
+
+export function buildScenarioSchema(stepSchema: z.ZodType) {
+  return z.object({
+    name: z.string().optional().describe("Scenario name (required unless common_scenario_id is specified)"),
+    requires: z.array(z.string()).optional().describe(
+      "Variable names required for this scenario to execute. If any listed variable is not available in the environment at execution time, the entire scenario will be skipped. Use this for environment-specific scenarios (e.g. DB tests that need db_url)."
+    ),
+    steps: z.array(stepSchema).optional().describe("Steps in this scenario (required unless common_scenario_id is specified)"),
+    common_scenario_id: z.string().optional().describe(
+      "ID of a common scenario to include. When specified, name/steps/requires default to the common scenario's values but can be overridden. Use list_common_scenarios to see available templates."
+    ),
+  }).refine(
+    (data) => data.common_scenario_id || (data.name && data.steps && data.steps.length > 0),
+    { message: "Either common_scenario_id or both name and steps are required" }
+  );
+}
+
+/** Default ScenarioSchema (built-in actions only, for backward compatibility) */
+export const ScenarioSchema = buildScenarioSchema(StepSchema);
 
 export function registerQAPlanTools(
   server: McpServer,
   client: AquaClient,
+  pluginRegistry?: PluginRegistry,
 ) {
+  const stepSchema = buildStepSchema(pluginRegistry);
+  const scenarioSchema = buildScenarioSchema(stepSchema);
   server.tool(
     "create_qa_plan",
     `Create a new QA plan. The project is automatically determined from the configured project_key.
@@ -220,7 +253,7 @@ Key behaviors:
         .optional()
         .describe('Default variable values as a JSON object (not a string). Example: { "api_base_url": "https://api.example.com", "timeout": "30" }. Overridden by environment files and execution arguments.'),
       scenarios: z
-        .array(ScenarioSchema)
+        .array(scenarioSchema)
         .describe("Ordered list of test scenarios"),
     },
     async ({ id, name, description, variables, scenarios }) => {
@@ -298,15 +331,15 @@ This is more efficient than update_qa_plan when you only need to change one step
         .optional()
         .describe("Base version number (defaults to latest)"),
       action: z
-        .enum(["http_request", "browser"])
+        .string()
         .optional()
-        .describe("New action type"),
+        .describe("New action type (http_request, browser, or plugin action type)"),
       config: z
-        .union([HttpRequestConfigSchema, BrowserConfigSchema])
+        .union([HttpRequestConfigSchema, BrowserConfigSchema, z.record(z.any())])
         .optional()
         .describe("New config (replaces entire config). " + CONFIG_DESCRIPTION),
       assertions: z
-        .array(AssertionSchema)
+        .array(z.union([AssertionSchema, z.record(z.any())]))
         .optional()
         .describe("New assertions (replaces entire assertions list). " + ASSERTIONS_DESCRIPTION),
       extract: z
@@ -368,10 +401,10 @@ The step is appended to the end of the scenario by default, or after a specific 
       scenario_name: z.string().describe("Scenario to add the step to"),
       step_key: z.string().describe("Unique step key for the new step"),
       action: z
-        .enum(["http_request", "browser"])
-        .describe("Step action type"),
+        .string()
+        .describe("Step action type (http_request, browser, or plugin action type)"),
       config: z
-        .union([HttpRequestConfigSchema, BrowserConfigSchema])
+        .union([HttpRequestConfigSchema, BrowserConfigSchema, z.record(z.any())])
         .describe("Action-specific configuration. " + CONFIG_DESCRIPTION),
       version: z
         .number()

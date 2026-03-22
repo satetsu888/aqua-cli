@@ -8,22 +8,23 @@ import { collectVariableReferences } from "../../utils/template.js";
 import { Masker } from "../../masking/index.js";
 import type { MaskContext } from "../../masking/index.js";
 import type { Scenario, Step, StepResult } from "../../qa-plan/types.js";
-import { StepSchema } from "./qa-plan.js";
-
-// run_scenario always requires name and steps (no common_scenario_id support)
-const InlineScenarioSchema = z.object({
-  name: z.string().describe("Scenario name"),
-  requires: z.array(z.string()).optional().describe(
-    "Variable names required for this scenario to execute."
-  ),
-  steps: z.array(StepSchema).describe("Steps in this scenario"),
-});
+import { buildStepSchema } from "./qa-plan.js";
 
 export function registerScenarioTools(
   server: McpServer,
   client: AquaClient,
   pluginRegistry?: PluginRegistry,
 ) {
+  const stepSchema = buildStepSchema(pluginRegistry);
+
+  // run_scenario always requires name and steps (no common_scenario_id support)
+  const InlineScenarioSchema = z.object({
+    name: z.string().describe("Scenario name"),
+    requires: z.array(z.string()).optional().describe(
+      "Variable names required for this scenario to execute."
+    ),
+    steps: z.array(stepSchema).describe("Steps in this scenario"),
+  });
   server.tool(
     "run_scenario",
     `Execute a complete scenario definition in a single call for batch validation.

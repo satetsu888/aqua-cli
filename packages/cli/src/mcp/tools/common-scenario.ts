@@ -1,13 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AquaClient } from "../../api/client.js";
-import { StepSchema } from "./qa-plan.js";
+import type { PluginRegistry } from "../../plugin/registry.js";
+import { buildStepSchema } from "./qa-plan.js";
 import { unescapeUnicode } from "../sanitize.js";
 
 export function registerCommonScenarioTools(
   server: McpServer,
-  client: AquaClient
+  client: AquaClient,
+  pluginRegistry?: PluginRegistry,
 ) {
+  const stepSchema = buildStepSchema(pluginRegistry);
   server.tool(
     "create_common_scenario",
     "Create a reusable common scenario template at the project level. Common scenarios can be referenced in QA plans via common_scenario_id to avoid duplicating frequently-used scenarios (e.g. login, data setup, cleanup).",
@@ -21,7 +24,7 @@ export function registerCommonScenarioTools(
         .array(z.string())
         .optional()
         .describe("Variable names required for this scenario to execute"),
-      steps: z.array(StepSchema).describe("Steps in this scenario"),
+      steps: z.array(stepSchema).describe("Steps in this scenario"),
     },
     async ({ name, description, requires, steps }) => {
       const cs = await client.createCommonScenario({
@@ -98,7 +101,7 @@ export function registerCommonScenarioTools(
         .optional()
         .describe("New required variable names"),
       steps: z
-        .array(StepSchema)
+        .array(stepSchema)
         .optional()
         .describe("New steps (replaces all steps)"),
     },
