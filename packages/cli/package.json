@@ -1,0 +1,68 @@
+{
+  "name": "@aquaqa/cli",
+  "version": "0.4.0",
+  "description": "QA planning, execution, and analysis service with AI agents",
+  "type": "module",
+  "bin": {
+    "aqua-cli": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satetsu888/aqua-cli.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://github.com/satetsu888/aqua-cli",
+  "bugs": {
+    "url": "https://github.com/satetsu888/aqua-cli/issues"
+  },
+  "keywords": [
+    "aqua",
+    "qa",
+    "testing",
+    "mcp",
+    "ai-agent",
+    "playwright",
+    "cli"
+  ],
+  "author": "satetsu888",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "commander": "^12.0.0",
+    "otpauth": "^9.5.0",
+    "picocolors": "^1.1.1",
+    "playwright": "^1.58.2",
+    "undici": "^7.18.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.0.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}
