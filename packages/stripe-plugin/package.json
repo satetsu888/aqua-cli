@@ -1,6 +1,6 @@
 {
   "name": "@aquaqa/stripe-plugin",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Stripe plugin for aqua QA - verify Stripe resource states in QA plans",
   "type": "module",
   "main": "./dist/index.js",
@@ -37,7 +37,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@aquaqa/cli": ">=0.4.0"
+    "@aquaqa/cli": ">=0.5.0"
   },
   "dependencies": {
     "stripe": "^17.0.0"
