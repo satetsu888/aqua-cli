@@ -1,0 +1,54 @@
+{
+  "name": "@aquaqa/supabase-plugin",
+  "version": "0.1.0",
+  "description": "Supabase plugin for aqua QA - verify Supabase resource states in QA plans",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satetsu888/aqua-cli.git",
+    "directory": "packages/supabase-plugin"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "aqua",
+    "qa",
+    "supabase",
+    "plugin"
+  ],
+  "author": "satetsu888",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@aquaqa/cli": ">=0.4.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0"
+  },
+  "devDependencies": {
+    "@aquaqa/cli": "*",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.5.1",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}
