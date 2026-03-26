@@ -1,0 +1,55 @@
+{
+  "name": "@aquaqa/firebase-plugin",
+  "version": "0.1.0",
+  "description": "Firebase plugin for aqua QA - verify Firebase resource states in QA plans",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satetsu888/aqua-cli.git",
+    "directory": "packages/firebase-plugin"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "aqua",
+    "qa",
+    "firebase",
+    "firestore",
+    "plugin"
+  ],
+  "author": "satetsu888",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@aquaqa/cli": ">=0.4.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  },
+  "devDependencies": {
+    "@aquaqa/cli": "*",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.5.1",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}
