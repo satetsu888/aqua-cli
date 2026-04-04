@@ -1,5 +1,11 @@
 # @aquaqa/cli
 
+## 0.5.1
+
+### Patch Changes
+
+- [`2603a3e`](https://github.com/satetsu888/aqua-cli/commit/2603a3e9b398faf3ce7af43ae41de2a902cd2396) Thanks [@satetsu888](https://github.com/satetsu888)! - Add `resolve-secrets` command for resolving external secrets from environment files and outputting structured JSON. Enhance `getCachedSecret()` to support querying an external cache server via `AQUA_SECRET_CACHE_SOCKET` environment variable (UDS/Named Pipe).
+
 ## 0.5.0
 
 ### Minor Changes
