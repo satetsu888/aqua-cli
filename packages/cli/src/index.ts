@@ -11,6 +11,7 @@ import { runInit } from "./setup/init.js";
 import { runExecute } from "./commands/execute.js";
 import { runRecord } from "./commands/record.js";
 import { runPluginAdd, runPluginRemove, runPluginList } from "./commands/plugin.js";
+import { runResolveSecrets } from "./commands/resolve-secrets.js";
 import { AquaClient } from "./api/client.js";
 
 declare const __CLI_VERSION__: string;
@@ -194,6 +195,22 @@ pluginCmd
   .action(() => {
     runPluginList();
   });
+
+program
+  .command("resolve-secrets")
+  .description(
+    "Resolve external secrets from environment files and output as JSON"
+  )
+  .option(
+    "--project <path>",
+    "Project root directory (defaults to git root or cwd)"
+  )
+  .option("--env <name>", "Environment name to resolve (defaults to all)")
+  .action(
+    async (opts: { project?: string; env?: string }) => {
+      await runResolveSecrets(opts);
+    }
+  );
 
 program
   .command("mcp-server")

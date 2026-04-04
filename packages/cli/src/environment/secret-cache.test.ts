@@ -86,35 +86,35 @@ describe("getCachedSecret / setCachedSecret", () => {
     clearSecretCache();
   });
 
-  it("returns undefined for cache miss", () => {
+  it("returns undefined for cache miss", async () => {
     const entry: SecretEntry = { type: "op", value: "op://vault/item/field" };
-    expect(getCachedSecret(entry)).toBeUndefined();
+    expect(await getCachedSecret(entry)).toBeUndefined();
   });
 
-  it("returns cached value after set", () => {
+  it("returns cached value after set", async () => {
     const entry: SecretEntry = { type: "op", value: "op://vault/item/field" };
     setCachedSecret(entry, undefined, "resolved-value");
-    expect(getCachedSecret(entry)).toBe("resolved-value");
+    expect(await getCachedSecret(entry)).toBe("resolved-value");
   });
 
-  it("returns undefined for literal type (not cached)", () => {
+  it("returns undefined for literal type (not cached)", async () => {
     const entry: SecretEntry = { type: "literal", value: "plain-value" };
     setCachedSecret(entry, undefined, "plain-value");
-    expect(getCachedSecret(entry)).toBeUndefined();
+    expect(await getCachedSecret(entry)).toBeUndefined();
   });
 
-  it("returns undefined for env type (not cached)", () => {
+  it("returns undefined for env type (not cached)", async () => {
     const entry: SecretEntry = { type: "env", value: "MY_VAR" };
     setCachedSecret(entry, undefined, "env-value");
-    expect(getCachedSecret(entry)).toBeUndefined();
+    expect(await getCachedSecret(entry)).toBeUndefined();
   });
 
-  it("distinguishes entries with different providerConfig", () => {
+  it("distinguishes entries with different providerConfig", async () => {
     const entry: SecretEntry = { type: "op", value: "op://vault/item/field" };
     setCachedSecret(entry, undefined, "value-no-provider");
     setCachedSecret(entry, { profile: "staging" }, "value-with-provider");
-    expect(getCachedSecret(entry)).toBe("value-no-provider");
-    expect(getCachedSecret(entry, { profile: "staging" })).toBe("value-with-provider");
+    expect(await getCachedSecret(entry)).toBe("value-no-provider");
+    expect(await getCachedSecret(entry, { profile: "staging" })).toBe("value-with-provider");
   });
 });
 
@@ -174,7 +174,7 @@ describe("warmSecretCache", () => {
 
     // Verify cached
     const entry: SecretEntry = { type: "op", value: "op://vault/item/key" };
-    expect(getCachedSecret(entry)).toBe("resolved-secret");
+    expect(await getCachedSecret(entry)).toBe("resolved-secret");
   });
 
   it("skips secrets when CLI is not available", async () => {

@@ -25,6 +25,21 @@ aqua-cli/
 └── package-lock.json
 ```
 
+## CLI コマンド一覧
+
+| コマンド | 説明 |
+|---------|------|
+| `aqua-cli login` | aqua サーバーに認証 |
+| `aqua-cli logout` | 認証情報を削除 |
+| `aqua-cli init` | プロジェクト設定を初期化 |
+| `aqua-cli whoami` | 現在の認証ユーザーを表示 |
+| `aqua-cli execute <qa_plan_id>` | QA プランを実行 |
+| `aqua-cli record [url]` | ブラウザ操作を記録 |
+| `aqua-cli resolve-secrets` | 環境ファイルの外部シークレットを解決して JSON 出力 |
+| `aqua-cli mcp-server` | MCP サーバーを起動 |
+| `aqua-cli plugin add/remove/list` | プラグイン管理 |
+| `aqua-cli web` | Web UI をブラウザで開く |
+
 ## 開発コマンド
 
 ```bash
@@ -48,6 +63,12 @@ npx changeset          # リリース用の変更内容ファイルを作成
 - モジュールモック: `vi.mock()`、グローバルモック: `vi.stubGlobal()`、型付き: `vi.mocked()`
 - テストデータはファクトリ関数 + `overrides` パターン
 - MCP ツールテストは `createMockServer()` でツール登録をキャプチャ
+
+## シークレットキャッシュ連携
+
+`getCachedSecret()` は環境変数 `AQUA_SECRET_CACHE_SOCKET` が設定されている場合、ローカル Map ミス時に外部キャッシュサーバー（aqua-desktop）に HTTP over UDS/Named Pipe で問い合わせる。接続失敗時は従来通り外部 resolver で解決する（graceful degradation）。
+
+`resolve-secrets` コマンドは aqua-desktop から呼ばれ、環境ファイルのシークレットを一括解決して構造化 JSON を返す。失敗時には `secret_ref`（参照先）や `error_type`（`auth_required` / `resolution_failed`）を含み、aqua-desktop の UI が適切なガイダンスを表示できるようにする。
 
 ## 新しいパッケージの追加
 

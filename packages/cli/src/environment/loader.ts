@@ -66,7 +66,7 @@ async function resolveSecretEntry(
     }
     default: {
       const providerConfig = secretProviders?.[entry.type];
-      const cached = getCachedSecret(entry, providerConfig);
+      const cached = await getCachedSecret(entry, providerConfig);
       if (cached !== undefined) return cached;
 
       const resolver = getResolver(entry.type);

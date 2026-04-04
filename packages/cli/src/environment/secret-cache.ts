@@ -1,4 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
+import { request } from "node:http";
 import { join, extname, basename } from "node:path";
 import type { SecretEntry } from "./types.js";
 import { environmentFileSchema } from "./types.js";
@@ -24,13 +25,68 @@ export function buildSecretCacheKey(
   return JSON.stringify(key);
 }
 
-/** Get a cached secret value. Returns undefined for literal/env types or cache miss. */
-export function getCachedSecret(
+/**
+ * Query the remote secret cache server via UDS or Named Pipe.
+ * Returns undefined on any failure (graceful degradation).
+ */
+async function queryRemoteCache(cacheKey: string): Promise<string | undefined> {
+  const socketPath = process.env.AQUA_SECRET_CACHE_SOCKET;
+  if (!socketPath) return undefined;
+
+  return new Promise<string | undefined>((resolve) => {
+    const req = request(
+      {
+        socketPath,
+        path: `/secrets/${encodeURIComponent(cacheKey)}`,
+        method: "GET",
+        timeout: 2000,
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          resolve(undefined);
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+        res.on("error", () => resolve(undefined));
+      }
+    );
+    req.on("error", () => resolve(undefined));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(undefined);
+    });
+    req.end();
+  });
+}
+
+/**
+ * Get a cached secret value. Returns undefined for literal/env types or cache miss.
+ * Checks the local in-memory cache first, then falls back to querying
+ * an external cache server via AQUA_SECRET_CACHE_SOCKET if set.
+ */
+export async function getCachedSecret(
   entry: SecretEntry,
   providerConfig?: ProviderConfig
-): string | undefined {
+): Promise<string | undefined> {
   if (entry.type === "literal" || entry.type === "env") return undefined;
-  return cache.get(buildSecretCacheKey(entry, providerConfig));
+
+  const cacheKey = buildSecretCacheKey(entry, providerConfig);
+
+  // 1. Local in-memory cache
+  const local = cache.get(cacheKey);
+  if (local !== undefined) return local;
+
+  // 2. Remote cache server (if AQUA_SECRET_CACHE_SOCKET is set)
+  const remote = await queryRemoteCache(cacheKey);
+  if (remote !== undefined) {
+    cache.set(cacheKey, remote); // Populate local cache
+    return remote;
+  }
+
+  return undefined;
 }
 
 /** Store a resolved secret value in the cache. No-op for literal/env types. */
