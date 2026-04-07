@@ -1,5 +1,11 @@
 # @aquaqa/cli
 
+## 0.5.2
+
+### Patch Changes
+
+- [`8bc4383`](https://github.com/satetsu888/aqua-cli/commit/8bc43839757cea539ae65211b5b04ff280804372) Thanks [@satetsu888](https://github.com/satetsu888)! - Add aqua-desktop integration: UDS transport for AquaClient via AQUA_DESKTOP_SOCKET, desktop mode in MCP server (skip auth, auto-detect repo). Unify secret cache to use AQUA_DESKTOP_SOCKET, removing AQUA_SECRET_CACHE_SOCKET.
+
 ## 0.5.1
 
 ### Patch Changes
