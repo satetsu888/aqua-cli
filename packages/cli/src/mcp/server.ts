@@ -30,6 +30,7 @@ export async function startMCPServer(
   const isDesktopMode = !!desktopSocket;
 
   let client: AquaClient;
+  const projectKey = config?.project_key;
 
   if (isDesktopMode) {
     // Desktop mode: connect via UDS, no auth needed
@@ -51,7 +52,6 @@ export async function startMCPServer(
       effectiveApiKey = credential.api_key;
     }
 
-    const projectKey = config?.project_key;
     client = new AquaClient(serverURL, effectiveApiKey, projectKey);
 
     // Verify authentication (and project access if project key is configured)
