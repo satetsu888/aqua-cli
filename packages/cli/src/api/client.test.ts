@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AquaClient } from "./client.js";
 
 describe("AquaClient", () => {
@@ -206,5 +206,181 @@ describe("AquaClient", () => {
       })
     );
     expect(result).toEqual({ content });
+  });
+
+  describe("isDesktopMode", () => {
+    it("returns false when no socketPath is provided", () => {
+      const client = new AquaClient("http://localhost:8080", "key");
+      expect(client.isDesktopMode).toBe(false);
+    });
+
+    it("returns true when socketPath is provided", () => {
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+      });
+      expect(client.isDesktopMode).toBe(true);
+    });
+  });
+
+  describe("desktop mode (UDS transport)", () => {
+    let mockRequest: ReturnType<typeof vi.fn>;
+    let capturedOptions: Record<string, unknown>;
+    let capturedCallback: (res: unknown) => void;
+
+    beforeEach(() => {
+      // Mock node:http.request
+      mockRequest = vi.fn().mockImplementation((opts, cb) => {
+        capturedOptions = opts;
+        capturedCallback = cb;
+        const req = {
+          on: vi.fn(),
+          write: vi.fn(),
+          end: vi.fn(() => {
+            // Simulate response
+            const res = {
+              statusCode: 200,
+              on: vi.fn((event: string, handler: (data?: unknown) => void) => {
+                if (event === "data") {
+                  handler(Buffer.from(JSON.stringify({ id: "p1", name: "Test" })));
+                }
+                if (event === "end") {
+                  handler();
+                }
+              }),
+            };
+            capturedCallback(res);
+          }),
+        };
+        return req;
+      });
+
+      vi.doMock("node:http", () => ({
+        request: mockRequest,
+      }));
+    });
+
+    afterEach(() => {
+      vi.doUnmock("node:http");
+    });
+
+    it("routes requests through UDS when socketPath is set", async () => {
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+        repoOwner: "myorg",
+        repoName: "myrepo",
+      });
+
+      await client.getQAPlan("p1");
+
+      expect(mockRequest).toHaveBeenCalled();
+      expect(capturedOptions.socketPath).toBe("/tmp/aqua.sock");
+      expect(capturedOptions.path).toBe("/api/qa-plans/p1");
+      expect(capturedOptions.method).toBe("GET");
+    });
+
+    it("sends X-Repo-Owner and X-Repo-Name headers", async () => {
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+        repoOwner: "myorg",
+        repoName: "myrepo",
+      });
+
+      await client.getQAPlan("p1");
+
+      const headers = capturedOptions.headers as Record<string, string>;
+      expect(headers["X-Repo-Owner"]).toBe("myorg");
+      expect(headers["X-Repo-Name"]).toBe("myrepo");
+    });
+
+    it("does not send Authorization header in desktop mode", async () => {
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+      });
+
+      await client.getQAPlan("p1");
+
+      const headers = capturedOptions.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBeUndefined();
+    });
+
+    it("does not call global fetch in desktop mode", async () => {
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+      });
+
+      await client.getQAPlan("p1");
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("sends POST body via UDS", async () => {
+      let writtenBody = "";
+      mockRequest.mockImplementation((opts: Record<string, unknown>, cb: (res: unknown) => void) => {
+        capturedOptions = opts;
+        capturedCallback = cb;
+        const req = {
+          on: vi.fn(),
+          write: vi.fn((data: string) => { writtenBody = data; }),
+          end: vi.fn(() => {
+            const res = {
+              statusCode: 201,
+              on: vi.fn((event: string, handler: (data?: unknown) => void) => {
+                if (event === "data") {
+                  handler(Buffer.from(JSON.stringify({ id: "p1" })));
+                }
+                if (event === "end") {
+                  handler();
+                }
+              }),
+            };
+            cb(res);
+          }),
+        };
+        return req;
+      });
+
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+      });
+
+      await client.createQAPlan({ name: "New Plan" });
+
+      expect(capturedOptions.method).toBe("POST");
+      expect(JSON.parse(writtenBody)).toEqual({ name: "New Plan" });
+    });
+
+    it("handles error responses via UDS", async () => {
+      mockRequest.mockImplementation((opts: Record<string, unknown>, cb: (res: unknown) => void) => {
+        capturedOptions = opts;
+        const req = {
+          on: vi.fn(),
+          write: vi.fn(),
+          end: vi.fn(() => {
+            const res = {
+              statusCode: 404,
+              statusMessage: "Not Found",
+              on: vi.fn((event: string, handler: (data?: unknown) => void) => {
+                if (event === "data") {
+                  handler(Buffer.from(JSON.stringify({ error: "Not Found" })));
+                }
+                if (event === "end") {
+                  handler();
+                }
+              }),
+            };
+            cb(res);
+          }),
+        };
+        return req;
+      });
+
+      const client = new AquaClient("http://localhost", null, null, {
+        socketPath: "/tmp/aqua.sock",
+      });
+
+      await expect(client.getQAPlan("nonexistent")).rejects.toThrow(
+        "API error 404: Not Found"
+      );
+    });
   });
 });

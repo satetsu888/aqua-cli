@@ -181,11 +181,27 @@ export class AquaClient {
   private baseURL: string;
   private apiKey: string | null;
   private projectKey: string | null;
+  private socketPath: string | null;
+  private repoOwner: string | null;
+  private repoName: string | null;
 
-  constructor(baseURL: string, apiKey?: string | null, projectKey?: string | null) {
+  constructor(
+    baseURL: string,
+    apiKey?: string | null,
+    projectKey?: string | null,
+    options?: { socketPath?: string; repoOwner?: string; repoName?: string }
+  ) {
     this.baseURL = baseURL.replace(/\/$/, "");
     this.apiKey = apiKey ?? null;
     this.projectKey = projectKey ?? null;
+    this.socketPath = options?.socketPath ?? null;
+    this.repoOwner = options?.repoOwner ?? null;
+    this.repoName = options?.repoName ?? null;
+  }
+
+  /** Whether this client is connected to aqua-desktop via UDS. */
+  get isDesktopMode(): boolean {
+    return this.socketPath !== null;
   }
 
   private async request<T>(
@@ -193,6 +209,10 @@ export class AquaClient {
     path: string,
     body?: unknown
   ): Promise<T> {
+    if (this.socketPath) {
+      return this.requestViaSocket<T>(method, path, body);
+    }
+
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -229,6 +249,70 @@ export class AquaClient {
     }
 
     return res.json() as Promise<T>;
+  }
+
+  private async requestViaSocket<T>(
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<T> {
+    const { request } = await import("node:http");
+    const bodyStr = body ? JSON.stringify(body) : undefined;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.repoOwner) {
+      headers["X-Repo-Owner"] = this.repoOwner;
+    }
+    if (this.repoName) {
+      headers["X-Repo-Name"] = this.repoName;
+    }
+    if (bodyStr) {
+      headers["Content-Length"] = Buffer.byteLength(bodyStr).toString();
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      const req = request(
+        {
+          socketPath: this.socketPath!,
+          path,
+          method,
+          headers,
+          timeout: 30000,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            const responseBody = Buffer.concat(chunks).toString("utf-8");
+            if (res.statusCode === 204) {
+              resolve(undefined as T);
+              return;
+            }
+            if (res.statusCode && res.statusCode >= 400) {
+              const error = JSON.parse(responseBody).error || res.statusMessage;
+              reject(new Error(`API error ${res.statusCode}: ${error}`));
+              return;
+            }
+            try {
+              resolve(JSON.parse(responseBody) as T);
+            } catch {
+              resolve(responseBody as unknown as T);
+            }
+          });
+          res.on("error", reject);
+        }
+      );
+      req.on("error", reject);
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Request timed out"));
+      });
+      if (bodyStr) {
+        req.write(bodyStr);
+      }
+      req.end();
+    });
   }
 
   // QA Plans
@@ -455,6 +539,17 @@ export class AquaClient {
     contentType: string,
     metadata?: Record<string, unknown>
   ): Promise<Artifact> {
+    if (this.socketPath) {
+      return this.uploadArtifactViaSocket(
+        stepExecutionId,
+        type,
+        content,
+        filename,
+        contentType,
+        metadata
+      );
+    }
+
     const url = `${this.baseURL}/api/artifacts`;
     const formData = new FormData();
     formData.append("step_execution_id", stepExecutionId);
@@ -486,6 +581,70 @@ export class AquaClient {
     }
 
     return res.json() as Promise<Artifact>;
+  }
+
+  private async uploadArtifactViaSocket(
+    stepExecutionId: string,
+    type: string,
+    content: Buffer | string,
+    filename: string,
+    contentType: string,
+    metadata?: Record<string, unknown>
+  ): Promise<Artifact> {
+    const { request } = await import("node:http");
+    const boundary = `----AquaDesktop${Date.now()}`;
+    const contentBuf = typeof content === "string" ? Buffer.from(content) : content;
+
+    // Build multipart body
+    const parts: Buffer[] = [];
+    const addField = (name: string, value: string) => {
+      parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+      ));
+    };
+    addField("step_execution_id", stepExecutionId);
+    addField("type", type);
+    if (metadata) {
+      addField("metadata", JSON.stringify(metadata));
+    }
+    // File part
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`
+    ));
+    parts.push(contentBuf);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+
+    return new Promise<Artifact>((resolve, reject) => {
+      const req = request(
+        {
+          socketPath: this.socketPath!,
+          path: "/api/artifacts",
+          method: "POST",
+          headers: {
+            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            "Content-Length": body.length.toString(),
+          },
+          timeout: 60000,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            const responseBody = Buffer.concat(chunks).toString("utf-8");
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(`API error ${res.statusCode}: ${responseBody}`));
+              return;
+            }
+            resolve(JSON.parse(responseBody) as Artifact);
+          });
+          res.on("error", reject);
+        }
+      );
+      req.on("error", reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   async getArtifact(id: string): Promise<Artifact> {

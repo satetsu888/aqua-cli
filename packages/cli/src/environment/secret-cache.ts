@@ -30,7 +30,7 @@ export function buildSecretCacheKey(
  * Returns undefined on any failure (graceful degradation).
  */
 async function queryRemoteCache(cacheKey: string): Promise<string | undefined> {
-  const socketPath = process.env.AQUA_SECRET_CACHE_SOCKET;
+  const socketPath = process.env.AQUA_DESKTOP_SOCKET;
   if (!socketPath) return undefined;
 
   return new Promise<string | undefined>((resolve) => {
@@ -65,7 +65,7 @@ async function queryRemoteCache(cacheKey: string): Promise<string | undefined> {
 /**
  * Get a cached secret value. Returns undefined for literal/env types or cache miss.
  * Checks the local in-memory cache first, then falls back to querying
- * an external cache server via AQUA_SECRET_CACHE_SOCKET if set.
+ * an external cache server via AQUA_DESKTOP_SOCKET if set.
  */
 export async function getCachedSecret(
   entry: SecretEntry,
@@ -79,7 +79,7 @@ export async function getCachedSecret(
   const local = cache.get(cacheKey);
   if (local !== undefined) return local;
 
-  // 2. Remote cache server (if AQUA_SECRET_CACHE_SOCKET is set)
+  // 2. Remote cache server (if AQUA_DESKTOP_SOCKET is set)
   const remote = await queryRemoteCache(cacheKey);
   if (remote !== undefined) {
     cache.set(cacheKey, remote); // Populate local cache

@@ -84,6 +84,7 @@ describe("buildSecretCacheKey", () => {
 describe("getCachedSecret / setCachedSecret", () => {
   beforeEach(() => {
     clearSecretCache();
+    delete process.env.AQUA_DESKTOP_SOCKET;
   });
 
   it("returns undefined for cache miss", async () => {

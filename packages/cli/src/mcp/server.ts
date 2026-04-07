@@ -25,55 +25,76 @@ export async function startMCPServer(
   apiKey?: string | null,
   config?: AquaConfig | null
 ): Promise<void> {
-  // Ensure we have credentials (error if not logged in)
-  let effectiveApiKey = apiKey;
-  if (!effectiveApiKey) {
-    const credential = ensureCredential(serverURL);
-    effectiveApiKey = credential.api_key;
-  }
+  // Check for desktop mode (aqua-desktop IPC socket)
+  const desktopSocket = process.env.AQUA_DESKTOP_SOCKET;
+  const isDesktopMode = !!desktopSocket;
 
-  const projectKey = config?.project_key;
-  const client = new AquaClient(serverURL, effectiveApiKey, projectKey);
+  let client: AquaClient;
 
-  // Verify authentication (and project access if project key is configured)
-  try {
-    if (projectKey) {
-      // Resolve project by key (auto-creates if needed, auto-merges if applicable)
-      const result = await client.resolveProject();
-      if (result.created) {
-        process.stderr.write(
-          `Project auto-created for key '${projectKey}' in your personal organization.\n`
-        );
+  if (isDesktopMode) {
+    // Desktop mode: connect via UDS, no auth needed
+    // Extract repo info from git remote
+    const repoInfo = await detectRepoInfo();
+    client = new AquaClient("http://localhost", null, null, {
+      socketPath: desktopSocket,
+      repoOwner: repoInfo?.owner,
+      repoName: repoInfo?.name,
+    });
+    process.stderr.write(
+      `Connected to aqua-desktop via ${desktopSocket}\n`
+    );
+  } else {
+    // Normal mode: connect to aqua backend via HTTP
+    let effectiveApiKey = apiKey;
+    if (!effectiveApiKey) {
+      const credential = ensureCredential(serverURL);
+      effectiveApiKey = credential.api_key;
+    }
+
+    const projectKey = config?.project_key;
+    client = new AquaClient(serverURL, effectiveApiKey, projectKey);
+
+    // Verify authentication (and project access if project key is configured)
+    try {
+      if (projectKey) {
+        const result = await client.resolveProject();
+        if (result.created) {
+          process.stderr.write(
+            `Project auto-created for key '${projectKey}' in your personal organization.\n`
+          );
+        }
+      } else {
+        await client.listOrganizations();
       }
-    } else {
-      await client.listOrganizations();
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("401")) {
+        process.stderr.write(
+          `Error: Authentication failed. Your credentials may be expired or invalid.\n` +
+            `Run 'aqua-cli logout' then 'aqua-cli login' to re-authenticate.\n`
+        );
+        process.exit(1);
+      }
+      throw err;
     }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("401")) {
-      process.stderr.write(
-        `Error: Authentication failed. Your credentials may be expired or invalid.\n` +
-          `Run 'aqua-cli logout' then 'aqua-cli login' to re-authenticate.\n`
-      );
-      process.exit(1);
-    }
-    throw err;
   }
 
   // Pre-resolve external secrets from environment files
-  try {
-    const cacheResult = await warmSecretCache();
-    if (cacheResult.resolved > 0) {
-      process.stderr.write(
-        `Pre-resolved ${cacheResult.resolved} secret(s) from environment files.\n`
-      );
+  if (!isDesktopMode) {
+    try {
+      const cacheResult = await warmSecretCache();
+      if (cacheResult.resolved > 0) {
+        process.stderr.write(
+          `Pre-resolved ${cacheResult.resolved} secret(s) from environment files.\n`
+        );
+      }
+      if (cacheResult.failed > 0) {
+        process.stderr.write(
+          `Warning: ${cacheResult.failed} secret(s) could not be pre-resolved (will retry at execution time).\n`
+        );
+      }
+    } catch {
+      // Secret cache warmup failure should not block MCP startup
     }
-    if (cacheResult.failed > 0) {
-      process.stderr.write(
-        `Warning: ${cacheResult.failed} secret(s) could not be pre-resolved (will retry at execution time).\n`
-      );
-    }
-  } catch {
-    // Secret cache warmup failure should not block MCP startup
   }
 
   // Load plugins from .aqua/config.json
@@ -238,4 +259,27 @@ Each project can store a memory document for accumulating project knowledge lear
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+/**
+ * Detect repository owner/name from git remote URL.
+ */
+async function detectRepoInfo(): Promise<{ owner: string; name: string } | null> {
+  try {
+    const { execSync } = await import("node:child_process");
+    const remoteUrl = execSync("git remote get-url origin", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+
+    // Match SSH: git@github.com:owner/repo.git
+    // Match HTTPS: https://github.com/owner/repo.git
+    const sshMatch = remoteUrl.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
+    if (sshMatch) {
+      return { owner: sshMatch[1], name: sshMatch[2] };
+    }
+  } catch {
+    // Not a git repo or no remote
+  }
+  return null;
 }

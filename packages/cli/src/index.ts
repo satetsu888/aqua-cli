@@ -216,8 +216,9 @@ program
   .command("mcp-server")
   .description("Start the MCP server for AI agent integration")
   .action(async () => {
+    const isDesktopMode = !!process.env.AQUA_DESKTOP_SOCKET;
     const serverURL = resolveServerURL();
-    const credential = resolveCredential(serverURL);
+    const credential = isDesktopMode ? null : resolveCredential(serverURL);
     const config = loadConfig();
     await startMCPServer(serverURL, credential?.api_key, config);
   });
