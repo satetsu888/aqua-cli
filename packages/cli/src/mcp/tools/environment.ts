@@ -117,7 +117,7 @@ Secrets are resolved at execution time and masked before sending to server.`,
       variables: z
         .record(z.string())
         .optional()
-        .describe("Plain variables for template expansion. Example: { api_base_url: \"https://api.staging.example.com\", web_base_url: \"https://staging.example.com\" }"),
+        .describe("Plain variables for template expansion. Supports environment variable interpolation with {$ENV_VAR} (required) or {$ENV_VAR:-default} (with fallback). Example: { api_base_url: \"http://{$SUBDOMAIN:-staging}.example.com/api\", web_base_url: \"https://staging.example.com\" }"),
       secrets: z
         .record(secretEntrySchema)
         .optional()

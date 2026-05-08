@@ -63,6 +63,68 @@ describe("resolveEnvironment", () => {
     expect(result.proxy).toBeUndefined();
   });
 
+  describe("env var expansion in variables", () => {
+    it("expands {$VAR} in variable values", async () => {
+      process.env.MY_HOST = "staging.example.com";
+      const envFile: EnvironmentFile = {
+        variables: { api_url: "http://{$MY_HOST}/api" },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.variables.api_url).toBe("http://staging.example.com/api");
+    });
+
+    it("expands {$VAR:-default} using default when env not set", async () => {
+      delete process.env.SUBDOMAIN;
+      const envFile: EnvironmentFile = {
+        variables: { api_url: "http://{$SUBDOMAIN:-default}.example.com" },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.variables.api_url).toBe("http://default.example.com");
+    });
+
+    it("throws when required env var is not set", async () => {
+      delete process.env.REQUIRED_HOST;
+      const envFile: EnvironmentFile = {
+        variables: { api_url: "http://{$REQUIRED_HOST}/api" },
+      };
+      await expect(resolveEnvironment(envFile)).rejects.toThrow(
+        'Environment variable "REQUIRED_HOST" is not set'
+      );
+    });
+
+    it("does not expand env vars in secret values", async () => {
+      delete process.env.SHOULD_NOT_EXPAND;
+      const envFile: EnvironmentFile = {
+        secrets: {
+          key: { type: "literal", value: "has {$SHOULD_NOT_EXPAND} pattern" },
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.variables.key).toBe("has {$SHOULD_NOT_EXPAND} pattern");
+    });
+
+    it("expands env vars in proxy server", async () => {
+      process.env.PROXY_HOST = "proxy.internal";
+      const envFile: EnvironmentFile = {
+        proxy: { server: "http://{$PROXY_HOST}:3128" },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.proxy?.server).toBe("http://proxy.internal:3128");
+    });
+
+    it("expands env vars in proxy bypass", async () => {
+      process.env.INTERNAL_DOMAIN = "corp.example.com";
+      const envFile: EnvironmentFile = {
+        proxy: {
+          server: "http://proxy:3128",
+          bypass: "localhost,{$INTERNAL_DOMAIN}",
+        },
+      };
+      const result = await resolveEnvironment(envFile);
+      expect(result.proxy?.bypass).toBe("localhost,corp.example.com");
+    });
+  });
+
   describe("requiredKeys filtering", () => {
     it("resolves only secrets whose keys are in requiredKeys", async () => {
       process.env.USED_TOKEN = "used-value";

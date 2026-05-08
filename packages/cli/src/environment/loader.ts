@@ -6,6 +6,7 @@ import { environmentFileSchema } from "./types.js";
 import type { EnvironmentFile, ResolvedEnvironment, SecretEntry, ResolvedProxyConfig } from "./types.js";
 import { getResolver, type ProviderConfig } from "./resolver-registry.js";
 import { getCachedSecret, setCachedSecret } from "./secret-cache.js";
+import { expandEnvVars, expandEnvVarsInRecord, extractEnvVarReferences } from "./env-expand.js";
 
 /**
  * Load and resolve an environment file by name.
@@ -112,7 +113,9 @@ export async function resolveEnvironment(
   envFile: EnvironmentFile,
   requiredKeys?: Set<string>
 ): Promise<ResolvedEnvironment> {
-  const variables: Record<string, string> = { ...envFile.variables };
+  const variables: Record<string, string> = envFile.variables
+    ? expandEnvVarsInRecord(envFile.variables, "variable")
+    : {};
   const secretKeys = new Set<string>();
   const secretValues = new Set<string>();
 
@@ -143,7 +146,12 @@ export async function resolveEnvironment(
   // Resolve proxy configuration
   let proxy: ResolvedProxyConfig | undefined;
   if (envFile.proxy) {
-    proxy = { server: envFile.proxy.server, bypass: envFile.proxy.bypass };
+    proxy = {
+      server: expandEnvVars(envFile.proxy.server, "proxy server"),
+      bypass: envFile.proxy.bypass
+        ? expandEnvVars(envFile.proxy.bypass, "proxy bypass")
+        : undefined,
+    };
     if (envFile.proxy.username) {
       proxy.username = await resolveSecretEntry(envFile.proxy.username, "proxy username", secretProviders);
     }
@@ -355,6 +363,43 @@ export async function validateEnvironment(
           issues.push({
             severity: "warning",
             message: `${label} file not found: ${certPath}`,
+          });
+        }
+      }
+    }
+  }
+
+  // Check env var references in variables
+  if (envFile.variables) {
+    for (const [key, value] of Object.entries(envFile.variables)) {
+      const refs = extractEnvVarReferences(value);
+      for (const ref of refs) {
+        if (process.env[ref.name] === undefined && !ref.hasDefault) {
+          issues.push({
+            severity: "warning",
+            message: `Variable "${key}": environment variable "${ref.name}" is not set and has no default value`,
+          });
+        }
+      }
+    }
+  }
+
+  // Check env var references in proxy server/bypass
+  if (envFile.proxy) {
+    for (const ref of extractEnvVarReferences(envFile.proxy.server)) {
+      if (process.env[ref.name] === undefined && !ref.hasDefault) {
+        issues.push({
+          severity: "warning",
+          message: `Proxy server: environment variable "${ref.name}" is not set and has no default value`,
+        });
+      }
+    }
+    if (envFile.proxy.bypass) {
+      for (const ref of extractEnvVarReferences(envFile.proxy.bypass)) {
+        if (process.env[ref.name] === undefined && !ref.hasDefault) {
+          issues.push({
+            severity: "warning",
+            message: `Proxy bypass: environment variable "${ref.name}" is not set and has no default value`,
           });
         }
       }

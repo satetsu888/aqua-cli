@@ -25,6 +25,7 @@ export type {
   ResolvedEnvironment,
   ResolvedProxyConfig,
 } from "./types.js";
+export { expandEnvVars, expandEnvVarsInRecord, extractEnvVarReferences } from "./env-expand.js";
 export type { ExternalSecretResolver } from "./resolver-registry.js";
 export { registerResolver, getResolver, getAllResolvers } from "./resolver-registry.js";
 export { warmSecretCache, clearSecretCache } from "./secret-cache.js";
