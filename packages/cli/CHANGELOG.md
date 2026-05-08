@@ -1,5 +1,11 @@
 # @aquaqa/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- [`f26fded`](https://github.com/satetsu888/aqua-cli/commit/f26fdeda380b8eafc67fec86ecfe585ad90968a5) Thanks [@satetsu888](https://github.com/satetsu888)! - Support environment variable interpolation in environment file variables using `{$VAR}` and `{$VAR:-default}` syntax. This allows embedding OS environment variable values in variable strings at load time, useful for URLs that vary by machine or CI environment (e.g., `"api_url": "http://{$SUBDOMAIN:-staging}.example.com/api"`).
+
 ## 0.5.2
 
 ### Patch Changes
