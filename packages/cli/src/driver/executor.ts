@@ -472,13 +472,25 @@ export class QAPlanExecutor {
         // Non-critical: artifact upload failure shouldn't fail the step
       }
 
-      // Upload response artifact (masked)
-      const responseObj = {
-        status: result.response.status,
-        headers: result.response.headers,
-        body: result.response.body,
-        duration: result.response.duration,
+      // Upload response artifact (masked). For binary responses, the JSON
+      // artifact stores a body summary and the raw bytes go to a separate
+      // http_response_body artifact.
+      const response = result.response;
+      const isBinary = response.is_binary;
+      const bodyForArtifact = isBinary
+        ? `<binary ${response.body_size} bytes, sha256=${response.body_sha256}${response.content_type ? `, content_type=${response.content_type}` : ""}>`
+        : response.body;
+      const responseObj: Record<string, unknown> = {
+        status: response.status,
+        headers: response.headers,
+        body: bodyForArtifact,
+        body_size: response.body_size,
+        body_sha256: response.body_sha256,
+        duration: response.duration,
       };
+      if (response.body_truncated) responseObj.body_truncated = true;
+      if (response.content_type) responseObj.content_type = response.content_type;
+      if (isBinary) responseObj.is_binary = true;
       const maskedResponse = masker.mask("http_response", responseObj);
       const responseData = JSON.stringify(maskedResponse, null, 2);
       try {
@@ -488,10 +500,32 @@ export class QAPlanExecutor {
           responseData,
           "response.json",
           "application/json",
-          { status_code: result.response.status, duration_ms: result.response.duration }
+          { status_code: response.status, duration_ms: response.duration }
         );
       } catch {
         // Non-critical
+      }
+
+      // For binary responses, upload the raw body bytes as a separate artifact
+      // so the Web UI can offer download/preview.
+      if (isBinary && response.body_bytes) {
+        const ext = extensionForContentType(response.content_type);
+        try {
+          await this.client.uploadArtifact(
+            stepExecId,
+            "http_response_body",
+            response.body_bytes,
+            `response${ext}`,
+            response.content_type ?? "application/octet-stream",
+            {
+              size: response.body_size,
+              sha256: response.body_sha256,
+              truncated: response.body_truncated ?? false,
+            }
+          );
+        } catch {
+          // Non-critical
+        }
       }
     }
 
@@ -582,4 +616,29 @@ export class QAPlanExecutor {
       recorded,
     };
   }
+}
+
+const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "application/zip": ".zip",
+  "application/json": ".json",
+  "application/xml": ".xml",
+  "application/octet-stream": ".bin",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "image/svg+xml": ".svg",
+  "text/csv": ".csv",
+  "text/html": ".html",
+  "text/plain": ".txt",
+};
+
+function extensionForContentType(ct: string | undefined): string {
+  if (!ct) return ".bin";
+  return CONTENT_TYPE_EXTENSIONS[ct] ?? ".bin";
 }

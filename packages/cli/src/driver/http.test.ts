@@ -30,16 +30,32 @@ describe("HttpDriver", () => {
     } as Step;
   }
 
-  function successResponse(body: string, status = 200) {
+  function successResponse(
+    body: string | Uint8Array,
+    status = 200,
+    contentType: string = "application/json"
+  ) {
     const headers = new Map<string, string>();
-    headers.set("content-type", "application/json");
+    headers.set("content-type", contentType);
+    const bytes =
+      typeof body === "string" ? new TextEncoder().encode(body) : body;
+    // Single-chunk ReadableStream so HttpDriver.readResponseBody can consume it.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
     return Promise.resolve({
       status,
-      text: () => Promise.resolve(body),
+      body: stream,
       headers: {
         forEach: (cb: (value: string, key: string) => void) => {
           headers.forEach((v, k) => cb(v, k));
         },
+        // Used by HttpDriver in readResponseBody fallback paths; not strictly
+        // needed but harmless.
+        get: (name: string) => headers.get(name.toLowerCase()) ?? null,
       },
     });
   }
@@ -733,6 +749,285 @@ describe("HttpDriver", () => {
       await expect(buildBody({ type: "binary" } as never)).rejects.toThrow(
         /path or content_base64/
       );
+    });
+  });
+
+  describe("response body handling", () => {
+    it("decodes text response and fills sha256/size", async () => {
+      mockFetch.mockReturnValue(
+        successResponse('{"ok":true}', 200, "application/json")
+      );
+      const result = await driver.execute(httpStep(), {});
+      expect(result.response?.is_binary).toBe(false);
+      expect(result.response?.body).toBe('{"ok":true}');
+      expect(result.response?.body_size).toBe(11);
+      expect(result.response?.body_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.response?.content_type).toBe("application/json");
+      expect(result.response?.body_bytes).toBeUndefined();
+    });
+
+    it("treats application/octet-stream as binary", async () => {
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+      mockFetch.mockReturnValue(
+        successResponse(bytes, 200, "application/octet-stream")
+      );
+      const result = await driver.execute(httpStep(), {});
+      expect(result.response?.is_binary).toBe(true);
+      expect(result.response?.body).toBe("");
+      expect(result.response?.body_size).toBe(6);
+      expect(result.response?.body_bytes).toBeDefined();
+      expect(
+        Buffer.compare(result.response!.body_bytes!, Buffer.from(bytes))
+      ).toBe(0);
+    });
+
+    it("treats image/png as binary", async () => {
+      mockFetch.mockReturnValue(
+        successResponse(new Uint8Array([1, 2, 3]), 200, "image/png")
+      );
+      const result = await driver.execute(httpStep(), {});
+      expect(result.response?.is_binary).toBe(true);
+    });
+
+    it("treats application/vnd.api+json as text (vendor JSON)", async () => {
+      mockFetch.mockReturnValue(
+        successResponse('{"a":1}', 200, "application/vnd.api+json")
+      );
+      const result = await driver.execute(httpStep(), {});
+      expect(result.response?.is_binary).toBe(false);
+      expect(result.response?.body).toBe('{"a":1}');
+    });
+
+    it("honors response_body: 'binary' override", async () => {
+      // Even though Content-Type says JSON, force binary handling.
+      mockFetch.mockReturnValue(successResponse('{"x":1}', 200, "application/json"));
+      const step = httpStep({
+        config: {
+          method: "GET",
+          url: "http://x/",
+          response_body: "binary",
+        },
+      });
+      const result = await driver.execute(step, {});
+      expect(result.response?.is_binary).toBe(true);
+      expect(result.response?.body).toBe("");
+    });
+
+    it("honors response_body: 'text' override for octet-stream", async () => {
+      mockFetch.mockReturnValue(
+        successResponse("hello", 200, "application/octet-stream")
+      );
+      const step = httpStep({
+        config: {
+          method: "GET",
+          url: "http://x/",
+          response_body: "text",
+        },
+      });
+      const result = await driver.execute(step, {});
+      expect(result.response?.is_binary).toBe(false);
+      expect(result.response?.body).toBe("hello");
+    });
+
+    it("truncates body when max_response_body_size is exceeded", async () => {
+      const big = new Uint8Array(100); // 100 bytes
+      mockFetch.mockReturnValue(
+        successResponse(big, 200, "application/octet-stream")
+      );
+      const step = httpStep({
+        config: {
+          method: "GET",
+          url: "http://x/",
+          max_response_body_size: 40,
+        },
+      });
+      const result = await driver.execute(step, {});
+      expect(result.response?.body_truncated).toBe(true);
+      expect(result.response?.body_size).toBe(40);
+    });
+  });
+
+  describe("new assertions", () => {
+    describe("header assertion", () => {
+      it("equals (default) — pass when value matches case-insensitively", async () => {
+        mockFetch.mockReturnValue(successResponse("{}", 200, "application/json"));
+        const step = httpStep({
+          assertions: [
+            { type: "header", name: "Content-Type", expected: "application/json" },
+          ],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("equals — fail when missing", async () => {
+        mockFetch.mockReturnValue(successResponse("{}", 200, "application/json"));
+        const step = httpStep({
+          assertions: [
+            { type: "header", name: "X-Custom", expected: "yes" } as never,
+          ],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(false);
+        expect(result.assertionResults?.[0].actual).toBe("<missing>");
+      });
+
+      it("contains", async () => {
+        mockFetch.mockReturnValue(
+          successResponse("{}", 200, "application/json; charset=utf-8")
+        );
+        const step = httpStep({
+          assertions: [
+            { type: "header", name: "content-type", condition: "contains", expected: "charset" } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("exists / not_exists", async () => {
+        mockFetch.mockReturnValue(successResponse("{}", 200, "application/json"));
+        const step = httpStep({
+          assertions: [
+            { type: "header", name: "content-type", condition: "exists" } as never,
+            { type: "header", name: "x-nope", condition: "not_exists" } as never,
+          ],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(true);
+        expect(result.assertionResults?.[1].passed).toBe(true);
+      });
+
+      it("matches regex", async () => {
+        mockFetch.mockReturnValue(
+          successResponse("{}", 200, "application/json; charset=utf-8")
+        );
+        const step = httpStep({
+          assertions: [
+            { type: "header", name: "content-type", condition: "matches", expected: "^application/json" } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+    });
+
+    describe("body_size assertion", () => {
+      it("equals", async () => {
+        mockFetch.mockReturnValue(successResponse("12345", 200, "text/plain"));
+        const step = httpStep({
+          assertions: [{ type: "body_size", expected: 5 } as never],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("between", async () => {
+        mockFetch.mockReturnValue(successResponse("0123456789", 200, "text/plain"));
+        const step = httpStep({
+          assertions: [
+            { type: "body_size", condition: "between", expected: [5, 20] } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("greater_than fail", async () => {
+        mockFetch.mockReturnValue(successResponse("ab", 200, "text/plain"));
+        const step = httpStep({
+          assertions: [
+            { type: "body_size", condition: "greater_than", expected: 100 } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(false);
+      });
+    });
+
+    describe("body_hash assertion", () => {
+      it("sha256 (default) on text response", async () => {
+        // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        mockFetch.mockReturnValue(successResponse("hello", 200, "text/plain"));
+        const step = httpStep({
+          assertions: [
+            {
+              type: "body_hash",
+              expected:
+                "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("md5", async () => {
+        // md5("hello") = 5d41402abc4b2a76b9719d911017c592
+        mockFetch.mockReturnValue(successResponse("hello", 200, "text/plain"));
+        const step = httpStep({
+          assertions: [
+            {
+              type: "body_hash",
+              algorithm: "md5",
+              expected: "5d41402abc4b2a76b9719d911017c592",
+            } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("sha256 on binary response", async () => {
+        mockFetch.mockReturnValue(
+          successResponse(new Uint8Array([0xde, 0xad, 0xbe, 0xef]), 200, "application/octet-stream")
+        );
+        const step = httpStep({
+          assertions: [
+            // sha256(deadbeef) = 5f78c33274e43fa9de5659265c1d917e25c03722dcb0b8d27db8d5feaa813953
+            {
+              type: "body_hash",
+              expected:
+                "5f78c33274e43fa9de5659265c1d917e25c03722dcb0b8d27db8d5feaa813953",
+            } as never,
+          ],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+    });
+
+    describe("body_contains assertion", () => {
+      it("passes when substring present in text body", async () => {
+        mockFetch.mockReturnValue(
+          successResponse("<html><body>welcome user</body></html>", 200, "text/html")
+        );
+        const step = httpStep({
+          assertions: [{ type: "body_contains", expected: "welcome user" } as never],
+        });
+        expect((await driver.execute(step, {})).assertionResults?.[0].passed).toBe(true);
+      });
+
+      it("fails on binary response with explicit message", async () => {
+        mockFetch.mockReturnValue(
+          successResponse(new Uint8Array([1, 2, 3]), 200, "application/octet-stream")
+        );
+        const step = httpStep({
+          assertions: [{ type: "body_contains", expected: "x" } as never],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(false);
+        expect(result.assertionResults?.[0].message).toMatch(/binary response body/);
+      });
+    });
+
+    describe("json_path on binary", () => {
+      it("fails with explicit message", async () => {
+        mockFetch.mockReturnValue(
+          successResponse(new Uint8Array([1, 2, 3]), 200, "application/octet-stream")
+        );
+        const step = httpStep({
+          assertions: [
+            { type: "json_path", path: "$.a", condition: "exists" } as never,
+          ],
+        });
+        const result = await driver.execute(step, {});
+        expect(result.assertionResults?.[0].passed).toBe(false);
+        expect(result.assertionResults?.[0].message).toMatch(/binary response body/);
+      });
     });
   });
 });

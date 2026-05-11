@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Driver } from "./types.js";
 import type {
   Step,
@@ -24,6 +24,116 @@ const KNOWN_BODY_TYPES = new Set([
   "binary",
   "graphql",
 ]);
+
+const DEFAULT_MAX_RESPONSE_BODY_SIZE = 50 * 1024 * 1024; // 50 MB
+
+/**
+ * Decide whether a Content-Type indicates a text response that can safely be
+ * decoded as UTF-8 and shown in assertions/extracts as a string.
+ *
+ * Anything not explicitly recognized as text is treated as binary so that
+ * arbitrary bytes (PDF, images, archives, etc.) don't get mangled by UTF-8
+ * decoding.
+ */
+export function isTextContentType(contentType: string | undefined): boolean {
+  if (!contentType) {
+    // Servers that omit Content-Type usually return text (or nothing). Treat
+    // as text so the user sees the body rather than a binary placeholder.
+    return true;
+  }
+  const lower = contentType.toLowerCase().split(";")[0].trim();
+  if (lower.startsWith("text/")) return true;
+  if (lower === "application/json") return true;
+  if (lower === "application/xml") return true;
+  if (lower === "application/javascript" || lower === "application/ecmascript") return true;
+  if (lower === "application/x-www-form-urlencoded") return true;
+  if (lower === "application/ld+json" || lower === "application/problem+json") return true;
+  if (/^application\/[a-z0-9.-]+\+(json|xml)$/.test(lower)) return true;
+  return false;
+}
+
+/** Extract the MIME part (lower-cased, no parameters) from a Content-Type header. */
+function parseContentTypeMime(contentType: string | undefined): string | undefined {
+  if (!contentType) return undefined;
+  return contentType.toLowerCase().split(";")[0].trim() || undefined;
+}
+
+interface ReadBodyResult {
+  bytes: Buffer;
+  size: number;
+  sha256: string;
+  truncated: boolean;
+}
+
+/**
+ * Read the response body from a fetch Response with a streaming hash and a
+ * size cap. Always computes sha256 over the bytes actually read.
+ */
+export async function readResponseBody(
+  res: Response,
+  maxSize: number
+): Promise<ReadBodyResult> {
+  // Fallback for mock Response objects that don't provide a stream body.
+  if (!res.body) {
+    if (typeof res.text === "function") {
+      const text = await res.text();
+      const bytes = Buffer.from(text, "utf-8");
+      let kept = bytes;
+      let truncated = false;
+      if (bytes.length > maxSize) {
+        kept = bytes.subarray(0, maxSize);
+        truncated = true;
+      }
+      return {
+        bytes: kept,
+        size: kept.length,
+        sha256: createHash("sha256").update(kept).digest("hex"),
+        truncated,
+      };
+    }
+    return {
+      bytes: Buffer.alloc(0),
+      size: 0,
+      sha256: createHash("sha256").digest("hex"),
+      truncated: false,
+    };
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  const hasher = createHash("sha256");
+  let size = 0;
+  let truncated = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (size + value.length > maxSize) {
+      // Keep up to maxSize bytes, drop the rest.
+      const remaining = Math.max(0, maxSize - size);
+      if (remaining > 0) {
+        const slice = value.subarray(0, remaining);
+        chunks.push(slice);
+        hasher.update(slice);
+        size += slice.length;
+      }
+      truncated = true;
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore
+      }
+      break;
+    }
+    chunks.push(value);
+    hasher.update(value);
+    size += value.length;
+  }
+  return {
+    bytes: Buffer.concat(chunks),
+    size,
+    sha256: hasher.digest("hex"),
+    truncated,
+  };
+}
 
 /**
  * Normalize legacy body shapes into the discriminated RequestBody form.
@@ -353,15 +463,43 @@ export class HttpDriver implements Driver {
       }
       const res = await fetch(config.url, fetchOpts as RequestInit);
 
-      const duration = Date.now() - start;
-      const body = await res.text();
-
       const headers: Record<string, string> = {};
       res.headers.forEach((value, key) => {
         headers[key] = value;
       });
 
-      return { status: res.status, headers, body, duration };
+      const mime = parseContentTypeMime(headers["content-type"]);
+      const mode = config.response_body ?? "auto";
+      const isBinary =
+        mode === "binary"
+          ? true
+          : mode === "text"
+            ? false
+            : !isTextContentType(headers["content-type"]);
+
+      const maxSize = config.max_response_body_size ?? DEFAULT_MAX_RESPONSE_BODY_SIZE;
+      const read = await readResponseBody(res, maxSize);
+      const duration = Date.now() - start;
+
+      const response: HttpResponse = {
+        status: res.status,
+        headers,
+        body: isBinary ? "" : read.bytes.toString("utf-8"),
+        body_size: read.size,
+        body_sha256: read.sha256,
+        is_binary: isBinary,
+        duration,
+      };
+      if (isBinary) {
+        response.body_bytes = read.bytes;
+      }
+      if (read.truncated) {
+        response.body_truncated = true;
+      }
+      if (mime) {
+        response.content_type = mime;
+      }
+      return response;
     } finally {
       clearTimeout(timer);
     }
@@ -377,17 +515,45 @@ export class HttpDriver implements Driver {
       let result: AssertionResultData;
       switch (assertion.type) {
         case "status_code":
-          result = this.assertStatusCode(response, assertion.expected);
+          result = this.assertStatusCode(response, assertion.expected as number);
           break;
         case "status_code_in":
-          result = this.assertStatusCodeIn(response, assertion.expected);
+          result = this.assertStatusCodeIn(response, assertion.expected as number[]);
           break;
         case "json_path":
           result = this.assertJsonPath(
             response,
-            assertion.path,
-            assertion.condition,
-            assertion.expected
+            (assertion as { path: string }).path,
+            (assertion as { condition?: "exists" | "not_exists" | "contains" }).condition,
+            (assertion as { expected?: unknown }).expected
+          );
+          break;
+        case "header":
+          result = this.assertHeader(
+            response,
+            (assertion as { name: string }).name,
+            (assertion as { condition?: "equals" | "contains" | "exists" | "not_exists" | "matches" }).condition,
+            (assertion as { expected?: string }).expected
+          );
+          break;
+        case "body_size":
+          result = this.assertBodySize(
+            response,
+            (assertion as { condition?: "equals" | "greater_than" | "less_than" | "between" }).condition,
+            (assertion as { expected: number | [number, number] }).expected
+          );
+          break;
+        case "body_hash":
+          result = this.assertBodyHash(
+            response,
+            (assertion as { algorithm?: "sha256" | "md5" }).algorithm,
+            (assertion as { expected: string }).expected
+          );
+          break;
+        case "body_contains":
+          result = this.assertBodyContains(
+            response,
+            (assertion as { expected: string }).expected
           );
           break;
         default:
@@ -442,6 +608,13 @@ export class HttpDriver implements Driver {
     condition?: "exists" | "not_exists" | "contains",
     expected?: unknown
   ): AssertionResultData {
+    if (response.is_binary) {
+      return {
+        type: "json_path",
+        passed: false,
+        message: "Cannot apply json_path to a binary response body",
+      };
+    }
     try {
       const json = JSON.parse(response.body);
       const value = getJsonPath(json, path);
@@ -495,6 +668,7 @@ export class HttpDriver implements Driver {
     response: HttpResponse
   ): Record<string, string> | undefined {
     if (!step.extract) return undefined;
+    if (response.is_binary) return undefined;
 
     try {
       const json = JSON.parse(response.body);
@@ -509,6 +683,172 @@ export class HttpDriver implements Driver {
     } catch {
       return undefined;
     }
+  }
+
+  private assertHeader(
+    response: HttpResponse,
+    name: string,
+    condition: "equals" | "contains" | "exists" | "not_exists" | "matches" | undefined,
+    expected: string | undefined
+  ): AssertionResultData {
+    const lowerName = name.toLowerCase();
+    // headers are stored lower-cased by fetch's Headers.forEach
+    const actual = Object.entries(response.headers).find(
+      ([k]) => k.toLowerCase() === lowerName
+    )?.[1];
+    const cond = condition ?? "equals";
+
+    switch (cond) {
+      case "exists":
+        return {
+          type: "header",
+          expected: `${name} exists`,
+          actual: actual !== undefined ? "exists" : "missing",
+          passed: actual !== undefined,
+        };
+      case "not_exists":
+        return {
+          type: "header",
+          expected: `${name} not exists`,
+          actual: actual !== undefined ? "exists" : "missing",
+          passed: actual === undefined,
+        };
+      case "contains":
+        return {
+          type: "header",
+          expected: `${name} contains ${expected ?? ""}`,
+          actual: actual ?? "<missing>",
+          passed: actual !== undefined && actual.includes(expected ?? ""),
+        };
+      case "matches": {
+        if (actual === undefined) {
+          return {
+            type: "header",
+            expected: `${name} matches /${expected ?? ""}/`,
+            actual: "<missing>",
+            passed: false,
+            message: `Header ${name} is missing`,
+          };
+        }
+        try {
+          const re = new RegExp(expected ?? "");
+          return {
+            type: "header",
+            expected: `${name} matches /${expected ?? ""}/`,
+            actual,
+            passed: re.test(actual),
+          };
+        } catch (e) {
+          return {
+            type: "header",
+            passed: false,
+            message: `Invalid regex: ${e instanceof Error ? e.message : String(e)}`,
+          };
+        }
+      }
+      case "equals":
+      default:
+        return {
+          type: "header",
+          expected: expected ?? "",
+          actual: actual ?? "<missing>",
+          passed: actual === expected,
+        };
+    }
+  }
+
+  private assertBodySize(
+    response: HttpResponse,
+    condition: "equals" | "greater_than" | "less_than" | "between" | undefined,
+    expected: number | [number, number]
+  ): AssertionResultData {
+    const size = response.body_size;
+    const cond = condition ?? "equals";
+    switch (cond) {
+      case "greater_than": {
+        const n = expected as number;
+        return {
+          type: "body_size",
+          expected: `> ${n}`,
+          actual: String(size),
+          passed: size > n,
+        };
+      }
+      case "less_than": {
+        const n = expected as number;
+        return {
+          type: "body_size",
+          expected: `< ${n}`,
+          actual: String(size),
+          passed: size < n,
+        };
+      }
+      case "between": {
+        const [min, max] = expected as [number, number];
+        return {
+          type: "body_size",
+          expected: `${min}..${max}`,
+          actual: String(size),
+          passed: size >= min && size <= max,
+        };
+      }
+      case "equals":
+      default: {
+        const n = expected as number;
+        return {
+          type: "body_size",
+          expected: String(n),
+          actual: String(size),
+          passed: size === n,
+        };
+      }
+    }
+  }
+
+  private assertBodyHash(
+    response: HttpResponse,
+    algorithm: "sha256" | "md5" | undefined,
+    expected: string
+  ): AssertionResultData {
+    const algo = algorithm ?? "sha256";
+    let actual: string;
+    if (algo === "sha256") {
+      actual = response.body_sha256;
+    } else {
+      // md5: re-hash from body_bytes or body. body_sha256 is sha256 only.
+      const src = response.is_binary
+        ? response.body_bytes ?? Buffer.alloc(0)
+        : Buffer.from(response.body, "utf-8");
+      actual = createHash("md5").update(src).digest("hex");
+    }
+    return {
+      type: "body_hash",
+      expected: `${algo}:${expected}`,
+      actual: `${algo}:${actual}`,
+      passed: actual.toLowerCase() === expected.toLowerCase(),
+    };
+  }
+
+  private assertBodyContains(
+    response: HttpResponse,
+    expected: string
+  ): AssertionResultData {
+    if (response.is_binary) {
+      return {
+        type: "body_contains",
+        expected,
+        passed: false,
+        message: "Cannot apply body_contains to a binary response body",
+      };
+    }
+    return {
+      type: "body_contains",
+      expected,
+      actual: response.body.length > 200
+        ? `${response.body.slice(0, 200)}...(truncated)`
+        : response.body,
+      passed: response.body.includes(expected),
+    };
   }
 }
 

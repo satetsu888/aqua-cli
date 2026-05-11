@@ -219,11 +219,20 @@ function formatResultContent(
 
     // HTTP response details
     if (stepResult.response) {
+      const response = stepResult.response;
       const config = stepResult.action === "http_request" ? "(request details in config)" : "";
-      lines.push(`HTTP ${stepResult.response.status} (${stepResult.response.duration}ms) ${config}`.trim());
+      lines.push(`HTTP ${response.status} (${response.duration}ms) ${config}`.trim());
 
-      if (stepResult.response.body) {
-        const maskedBody = masker.mask("http_response", stepResult.response.body) as string;
+      if (response.is_binary) {
+        // Avoid loading raw bytes into LLM context; show a concise summary.
+        const sha = response.body_sha256 ? `${response.body_sha256.slice(0, 16)}...` : "?";
+        const ct = response.content_type ?? "unknown";
+        const trunc = response.body_truncated ? ", truncated" : "";
+        lines.push(
+          `Response body: <binary ${response.body_size} bytes, sha256=${sha}, content-type=${ct}${trunc}>`
+        );
+      } else if (response.body) {
+        const maskedBody = masker.mask("http_response", response.body) as string;
         const truncatedBody = maskedBody.length > 2000
           ? maskedBody.substring(0, 2000) + "...(truncated)"
           : maskedBody;

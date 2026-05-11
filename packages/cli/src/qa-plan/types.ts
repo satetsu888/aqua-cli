@@ -140,6 +140,10 @@ export const HttpRequestConfigSchema = z.object({
   ),
   timeout: z.number().optional().describe("Request timeout in ms (default: 30000)"),
   poll: PollConfigSchema.optional().describe("Polling configuration. When set, the request is repeated at interval until the condition is met or timeout is reached"),
+  response_body: z.enum(["auto", "text", "binary"]).optional()
+    .describe("How to handle the response body. 'auto' (default): decide by Content-Type. 'text': force text decoding. 'binary': force binary handling"),
+  max_response_body_size: z.number().optional()
+    .describe("Max bytes to read from the response body (default: 52428800 = 50MB). If exceeded, body_truncated is set to true and reading stops"),
 });
 
 export const BrowserStepSchema = z.union([
@@ -229,10 +233,48 @@ export const JsonPathAssertionSchema = z.object({
   description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
 });
 
+export const HeaderAssertionSchema = z.object({
+  type: z.literal("header"),
+  name: z.string().describe("Header name (case-insensitive)"),
+  condition: z.enum(["equals", "contains", "exists", "not_exists", "matches"])
+    .optional()
+    .describe("Match condition. Default: equals. matches: regular expression"),
+  expected: z.string().optional()
+    .describe("Expected value (required for equals/contains/matches; unused for exists/not_exists)"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
+});
+
+export const BodySizeAssertionSchema = z.object({
+  type: z.literal("body_size"),
+  condition: z.enum(["equals", "greater_than", "less_than", "between"])
+    .optional().describe("Comparison condition. Default: equals"),
+  expected: z.union([z.number(), z.tuple([z.number(), z.number()])])
+    .describe("Numeric expected size in bytes. For 'between', a [min, max] tuple"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
+});
+
+export const BodyHashAssertionSchema = z.object({
+  type: z.literal("body_hash"),
+  algorithm: z.enum(["sha256", "md5"]).optional()
+    .describe("Hash algorithm. Default: sha256"),
+  expected: z.string().describe("Expected hex digest"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
+});
+
+export const BodyContainsAssertionSchema = z.object({
+  type: z.literal("body_contains"),
+  expected: z.string().describe("Substring expected to appear in the (text) response body. Always fails for binary responses"),
+  description: z.string().optional().describe("Human-readable description of what this assertion verifies"),
+});
+
 export const HttpAssertionSchema = z.discriminatedUnion("type", [
   StatusCodeAssertionSchema,
   StatusCodeInAssertionSchema,
   JsonPathAssertionSchema,
+  HeaderAssertionSchema,
+  BodySizeAssertionSchema,
+  BodyHashAssertionSchema,
+  BodyContainsAssertionSchema,
 ]);
 
 // --- Browser Assertion Schemas ---
@@ -347,6 +389,10 @@ export const AssertionSchema = z.discriminatedUnion("type", [
   StatusCodeAssertionSchema,
   StatusCodeInAssertionSchema,
   JsonPathAssertionSchema,
+  HeaderAssertionSchema,
+  BodySizeAssertionSchema,
+  BodyHashAssertionSchema,
+  BodyContainsAssertionSchema,
   ElementTextAssertionSchema,
   ElementVisibleAssertionSchema,
   ElementNotVisibleAssertionSchema,
@@ -366,6 +412,10 @@ export const AssertionSchema = z.discriminatedUnion("type", [
 export type StatusCodeAssertion = z.infer<typeof StatusCodeAssertionSchema>;
 export type StatusCodeInAssertion = z.infer<typeof StatusCodeInAssertionSchema>;
 export type JsonPathAssertion = z.infer<typeof JsonPathAssertionSchema>;
+export type HeaderAssertion = z.infer<typeof HeaderAssertionSchema>;
+export type BodySizeAssertion = z.infer<typeof BodySizeAssertionSchema>;
+export type BodyHashAssertion = z.infer<typeof BodyHashAssertionSchema>;
+export type BodyContainsAssertion = z.infer<typeof BodyContainsAssertionSchema>;
 export type HttpAssertion = z.infer<typeof HttpAssertionSchema>;
 
 export type ElementTextAssertion = z.infer<typeof ElementTextAssertionSchema>;
@@ -409,7 +459,20 @@ export interface StepResult {
 export interface HttpResponse {
   status: number;
   headers: Record<string, string>;
+  /** UTF-8 decoded body for text responses; empty string for binary. */
   body: string;
+  /** Raw bytes; only set for binary responses. */
+  body_bytes?: Buffer;
+  /** Total bytes received (may be less than wire size if truncated). */
+  body_size: number;
+  /** SHA-256 hex digest of the received bytes (always computed). */
+  body_sha256: string;
+  /** True if reading stopped because max_response_body_size was exceeded. */
+  body_truncated?: boolean;
+  /** Lower-cased MIME (without parameters) from the Content-Type header. */
+  content_type?: string;
+  /** Whether the response was treated as binary. */
+  is_binary: boolean;
   duration: number; // ms
 }
 
