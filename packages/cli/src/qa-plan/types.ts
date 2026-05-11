@@ -463,16 +463,23 @@ export interface HttpResponse {
   body: string;
   /** Raw bytes; only set for binary responses. */
   body_bytes?: Buffer;
-  /** Total bytes received (may be less than wire size if truncated). */
-  body_size: number;
-  /** SHA-256 hex digest of the received bytes (always computed). */
-  body_sha256: string;
+  /**
+   * Total bytes received (may be less than wire size if truncated).
+   * Optional so plugin actions that synthesize a fake response don't have to
+   * fill this in; the HTTP driver always populates it.
+   */
+  body_size?: number;
+  /**
+   * SHA-256 hex digest of the received bytes. Set by the HTTP driver; plugin
+   * synthesized responses may omit it.
+   */
+  body_sha256?: string;
   /** True if reading stopped because max_response_body_size was exceeded. */
   body_truncated?: boolean;
   /** Lower-cased MIME (without parameters) from the Content-Type header. */
   content_type?: string;
-  /** Whether the response was treated as binary. */
-  is_binary: boolean;
+  /** Whether the response was treated as binary. Defaults to false when absent. */
+  is_binary?: boolean;
   duration: number; // ms
 }
 

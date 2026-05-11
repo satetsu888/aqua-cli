@@ -450,12 +450,14 @@ export class QAPlanExecutor {
     if (result.response && step.action === "http_request") {
       const config = step.config as { method?: string; url?: string; headers?: Record<string, string>; body?: unknown };
 
-      // Upload request artifact (masked)
+      // Upload request artifact (masked). Multipart/binary bodies are
+      // summarized to keep artifacts small and avoid dumping raw bytes or
+      // large Base64 blobs into the JSON.
       const requestObj = {
         method: config.method,
         url: config.url,
         headers: config.headers,
-        body: config.body,
+        body: summarizeRequestBody(config.body),
       };
       const maskedRequest = masker.mask("http_request", requestObj);
       const requestData = JSON.stringify(maskedRequest, null, 2);
@@ -641,4 +643,86 @@ const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
 function extensionForContentType(ct: string | undefined): string {
   if (!ct) return ".bin";
   return CONTENT_TYPE_EXTENSIONS[ct] ?? ".bin";
+}
+
+/**
+ * Produce a JSON-serializable summary of a request body for artifact recording.
+ * Keeps small structured content as-is but trims/elides raw bytes and large
+ * Base64 blobs so the request.json artifact stays small and human-readable.
+ */
+function summarizeRequestBody(body: unknown): unknown {
+  if (body === null || body === undefined) return body;
+  if (typeof body !== "object") return body;
+  if (Array.isArray(body)) return body;
+
+  const obj = body as Record<string, unknown>;
+  const type = obj.type;
+
+  if (typeof type !== "string") {
+    // Legacy / unknown shape — return as-is. masking will scan strings.
+    return body;
+  }
+
+  switch (type) {
+    case "json":
+    case "form":
+    case "text":
+    case "graphql":
+      return body;
+    case "multipart": {
+      const files = Array.isArray(obj.files) ? obj.files : [];
+      return {
+        type: "multipart",
+        boundary: obj.boundary,
+        fields: obj.fields,
+        files: files.map((f) => {
+          const file = (f ?? {}) as Record<string, unknown>;
+          const source =
+            file.path !== undefined
+              ? { source: "path", path: file.path }
+              : file.content !== undefined
+                ? {
+                    source: "inline_text",
+                    size: byteLengthUtf8(String(file.content)),
+                  }
+                : file.content_base64 !== undefined
+                  ? {
+                      source: "inline_base64",
+                      size: approxBase64ByteLength(String(file.content_base64)),
+                    }
+                  : { source: "<none>" };
+          return {
+            name: file.name,
+            filename: file.filename,
+            content_type: file.content_type,
+            ...source,
+          };
+        }),
+      };
+    }
+    case "binary": {
+      if (obj.path !== undefined) {
+        return { type: "binary", source: "path", path: obj.path };
+      }
+      if (obj.content_base64 !== undefined) {
+        return {
+          type: "binary",
+          source: "inline_base64",
+          size: approxBase64ByteLength(String(obj.content_base64)),
+        };
+      }
+      return { type: "binary", source: "<none>" };
+    }
+    default:
+      return body;
+  }
+}
+
+function byteLengthUtf8(s: string): number {
+  return Buffer.byteLength(s, "utf-8");
+}
+
+function approxBase64ByteLength(b64: string): number {
+  const trimmed = b64.replace(/=+$/, "");
+  return Math.floor((trimmed.length * 3) / 4);
 }

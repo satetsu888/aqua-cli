@@ -174,21 +174,38 @@ src/
 
 `executor.ts`（サーバー記録あり）と `scenario-runner.ts`（サーバー記録なし）が `step-utils.ts` の共有ユーティリティ（`resolveStepOrder`, `checkStepDependencies`, `checkBrowserDependencies`）を使ってシナリオ実行を統括し、各ステップの `action` に応じて適切な Driver を呼び出す:
 
-- **HTTP Driver** (`http.ts`) - `http_request` アクション。fetch でリクエストし、レスポンスに対してアサーションを実行。`poll` オプションで HTTP ポーリングにも対応
+- **HTTP Driver** (`http.ts`) - `http_request` アクション。fetch でリクエストし、レスポンスに対してアサーションを実行。`poll` オプションで HTTP ポーリングにも対応。あらゆる Content-Type の送受信に対応(後述「HTTP body 形式」)
 - **Browser Driver** (`browser.ts`) - `browser` アクション。Playwright でブラウザ操作。デフォルトタイムアウト10秒（`timeout_ms` でステップ単位で変更可能）。`goto` 失敗時はシナリオ内の残りステップを自動スキップ。`switch_to_frame` / `switch_to_main_frame` で iframe 切り替え対応
+
+### HTTP body 形式
+
+リクエスト body は `RequestBodySchema`（discriminated union）で表現:
+
+- `{ type: "json", value: ... }` - JSON 直列化
+- `{ type: "form", fields: {...} }` - `application/x-www-form-urlencoded`
+- `{ type: "multipart", boundary?, fields?, files? }` - `multipart/form-data`(files は `path` / `content` / `content_base64` を1つ指定)
+- `{ type: "text", value: "..." }` - 任意のテキスト(XML/SOAP 等)
+- `{ type: "binary", path? | content_base64? }` - 生バイナリ
+- `{ type: "graphql", query, variables?, operationName? }` - GraphQL
+
+**ヘッダーは自動付与しない**: ランナーはユーザーが `headers` に書いたものをそのまま送る。`Content-Type` も例外なし。これによりネガティブテスト(意図的なヘッダー/body 不一致)や、ベンダー固有 MIME(`application/vnd.api+json` 等)が表現可能。
+
+**後方互換**: 旧形式の `body`(plain object / string)は `normalizeBody` で自動的に `{ type: "json", ... }` / `{ type: "text", ... }` に正規化される。
+
+レスポンス側は `Content-Type` で text/binary を自動判定。`HttpRequestConfigSchema.response_body: "auto" | "text" | "binary"` で明示オーバーライド可。`max_response_body_size`(既定 50MB)でストリーミング読み込みのサイズキャップ。`HttpResponse` は `body`(テキスト時のみ)、`body_bytes`(バイナリ時のみ)、`body_size`、`body_sha256`、`body_truncated?`、`content_type?`、`is_binary` を持つ。バイナリレスポンスはアーティファクトとして `http_response.json`(要約) + `http_response_body`(生バイト)に分割記録される。
 
 ### アサーション型
 
 `qa-plan/types.ts` で Zod スキーマとして定義し、`z.infer<>` で TypeScript 型を導出（single source of truth）。全アサーションに任意の `description` フィールドあり。
 
-**HTTP アサーション**: `status_code`, `status_code_in`, `json_path`（equals / exists / not_exists / contains）
+**HTTP アサーション**: `status_code`, `status_code_in`, `json_path`(equals / exists / not_exists / contains), `header`(equals / contains / exists / not_exists / matches。大文字小文字を区別しない), `body_size`(equals / greater_than / less_than / between), `body_hash`(sha256 / md5。golden file 比較に使う), `body_contains`(テキスト body 部分一致。バイナリでは常に fail)
 
 **ブラウザアサーション**: `element_text`, `element_visible`, `element_not_visible`, `url_contains`, `title`, `screenshot`, `element_count`, `element_attribute`, `cookie_exists`, `cookie_value`, `localstorage_exists`, `localstorage_value`
 
 ### Step Config 型
 
 `action` による discriminated union で config を型付け:
-- `HttpRequestConfigSchema` - method, url, headers, body, timeout, poll
+- `HttpRequestConfigSchema` - method, url, headers, body(`RequestBodySchema`), timeout, poll, response_body, max_response_body_size
 - `BrowserConfigSchema` - steps（19種のブラウザアクション）, timeout_ms
 - `StepConditionSchema` - `variable_equals` / `variable_not_equals` で条件付き実行
 

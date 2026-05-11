@@ -13,15 +13,46 @@ import { unescapeUnicode } from "../sanitize.js";
 
 export const ASSERTIONS_DESCRIPTION = `Assertions to evaluate after step execution. Examples:
 
-http_request: { type: "status_code", expected: 200 }, { type: "status_code_in", expected: [200, 201] }, { type: "json_path", path: "$.data.name", expected: "test" }, { type: "json_path", path: "$.data.id", condition: "exists" }, { type: "json_path", path: "$.msg", condition: "contains", expected: "hello" }
+http_request (status / json): { type: "status_code", expected: 200 }, { type: "status_code_in", expected: [200, 201] }, { type: "json_path", path: "$.data.name", expected: "test" }, { type: "json_path", path: "$.data.id", condition: "exists" }, { type: "json_path", path: "$.msg", condition: "contains", expected: "hello" }
+
+http_request (headers): { type: "header", name: "Content-Type", expected: "application/json" } (default condition: equals), { type: "header", name: "Location", condition: "contains", expected: "/users/" }, { type: "header", name: "X-Request-Id", condition: "exists" }, { type: "header", name: "Set-Cookie", condition: "matches", expected: "session_id=" }
+
+http_request (body size / hash / contains, useful for downloads & non-JSON text): { type: "body_size", expected: 12345 }, { type: "body_size", condition: "between", expected: [1000, 5000] }, { type: "body_size", condition: "greater_than", expected: 0 }, { type: "body_hash", expected: "<sha256 hex>" }, { type: "body_hash", algorithm: "md5", expected: "<md5 hex>" }, { type: "body_contains", expected: "Welcome back" } (text responses only — fails on binary)
 
 browser: { type: "element_text", selector: "h1", contains: "Welcome" }, { type: "element_visible", selector: "#btn" }, { type: "element_not_visible", selector: ".modal" }, { type: "url_contains", expected: "/dashboard" }, { type: "title", expected: "Home" }, { type: "screenshot", name: "result" }, { type: "element_count", selector: ".item", expected: 5 }, { type: "element_attribute", selector: "#btn", attribute: "disabled", expected: "true" }, { type: "cookie_exists", name: "session_id" }, { type: "cookie_value", name: "theme", expected: "dark" }, { type: "localstorage_exists", key: "auth_token" }, { type: "localstorage_value", key: "lang", expected: "ja", match: "exact" }`;
 
 export const CONFIG_DESCRIPTION = `Examples:
 
-http_request: { method: "GET", url: "{{api_base_url}}/users", headers: { "Authorization": "Bearer {{token}}" } }
-http_request (POST): { method: "POST", url: "{{api_base_url}}/users", headers: { "Content-Type": "application/json" }, body: { name: "test" } }
+http_request (GET): { method: "GET", url: "{{api_base_url}}/users", headers: { "Authorization": "Bearer {{token}}" } }
+
+http_request (POST JSON — the most common case): { method: "POST", url: "{{api_base_url}}/users", headers: { "Content-Type": "application/json" }, body: { type: "json", value: { name: "test" } } }
+
+http_request (form-urlencoded): { method: "POST", url: "{{api_base_url}}/login", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: { type: "form", fields: { username: "{{user}}", password: "{{password}}" } } }
+
+http_request (multipart file upload): { method: "POST", url: "{{api_base_url}}/upload", headers: { "Content-Type": "multipart/form-data; boundary=----aqua-b" }, body: { type: "multipart", boundary: "----aqua-b", fields: { title: "report" }, files: [{ name: "file", path: "./fixtures/sample.pdf", filename: "sample.pdf", content_type: "application/pdf" }] } }
+
+http_request (raw text body, e.g. XML/SOAP): { method: "POST", url: "{{api_base_url}}/soap", headers: { "Content-Type": "application/xml" }, body: { type: "text", value: "<envelope>...</envelope>" } }
+
+http_request (raw binary body, e.g. image PUT): { method: "PUT", url: "{{api_base_url}}/avatar", headers: { "Content-Type": "image/png" }, body: { type: "binary", path: "./fixtures/avatar.png" } }
+
+http_request (GraphQL): { method: "POST", url: "{{api_base_url}}/graphql", headers: { "Content-Type": "application/json" }, body: { type: "graphql", query: "query Q($id: ID!) { user(id: $id) { name } }", variables: { id: "u_1" } } }
+
+http_request (negative test — header / body mismatch is intentional): { method: "POST", url: "{{api_base_url}}/users", headers: { "Content-Type": "application/xml" }, body: { type: "json", value: { name: "test" } }, assertions: [{ type: "status_code_in", expected: [400, 415] }] }
+
+http_request (binary response — file download): { method: "GET", url: "{{api_base_url}}/reports/123.pdf", response_body: "binary", assertions: [{ type: "header", name: "Content-Type", expected: "application/pdf" }, { type: "body_size", condition: "greater_than", expected: 1000 }] }
+
 http_request (polling): { method: "GET", url: "{{api_base_url}}/jobs/{{job_id}}", poll: { until: { type: "json_path", path: "$.status", expected: "completed" }, interval_ms: 1000, timeout_ms: 30000 } }
+
+http_request (legacy shorthand body — still supported; auto-treated as { type: "json", value: ... }): { method: "POST", url: "{{api_base_url}}/users", headers: { "Content-Type": "application/json" }, body: { name: "test" } }
+
+IMPORTANT — header handling for http_request:
+- The runner sends every header EXACTLY as written, and does NOT auto-inject Content-Type. If you want a Content-Type, write it in headers yourself. This makes negative tests (deliberate header/body mismatch) representable.
+- For multipart, you must write both: a "boundary" in body AND a matching "Content-Type: multipart/form-data; boundary=<same>" in headers.
+
+Response body handling:
+- response_body: "auto" | "text" | "binary" (default: "auto", which decides by Content-Type).
+- max_response_body_size: number (default: 52428800 = 50MB). When exceeded, the body is truncated and body_truncated=true.
+- For binary responses, json_path / body_contains / extract fail or return nothing. Use header / body_size / body_hash assertions instead.
 
 browser: { steps: [{ goto: "{{web_base_url}}/login" }, { type: { selector: "#email", text: "user@example.com" } }, { click: "#submit" }, { wait_for_selector: ".dashboard" }, { screenshot: "result" }] }
 browser (mobile): { viewport: "mobile", steps: [{ goto: "{{web_base_url}}" }, { click: ".hamburger-menu" }, { screenshot: "mobile_menu" }] }

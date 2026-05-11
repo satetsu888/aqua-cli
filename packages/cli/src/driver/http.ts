@@ -763,6 +763,13 @@ export class HttpDriver implements Driver {
     expected: number | [number, number]
   ): AssertionResultData {
     const size = response.body_size;
+    if (size === undefined) {
+      return {
+        type: "body_size",
+        passed: false,
+        message: "Response has no body_size (plugin-synthesized response?)",
+      };
+    }
     const cond = condition ?? "equals";
     switch (cond) {
       case "greater_than": {
@@ -813,6 +820,13 @@ export class HttpDriver implements Driver {
     const algo = algorithm ?? "sha256";
     let actual: string;
     if (algo === "sha256") {
+      if (response.body_sha256 === undefined) {
+        return {
+          type: "body_hash",
+          passed: false,
+          message: "Response has no body_sha256 (plugin-synthesized response?)",
+        };
+      }
       actual = response.body_sha256;
     } else {
       // md5: re-hash from body_bytes or body. body_sha256 is sha256 only.
