@@ -22,6 +22,7 @@ import {
   appendExplorationAction,
 } from "../../exploration/log.js";
 import type { ExplorationLogAction } from "../../exploration/log.js";
+import { CONFIG_DESCRIPTION } from "./qa-plan.js";
 
 const SESSION_TIMEOUT_MS = 900_000;
 
@@ -245,7 +246,7 @@ Provide exactly ONE of: browser_step, browser_steps, http_request, or browser_as
           'Multiple browser actions to execute in sequence. Only the final page state is returned. Use this to replay known action sequences quickly.'
         ),
       http_request: HttpRequestConfigSchema.optional().describe(
-        'HTTP request to execute. Example: { method: "GET", url: "https://api.example.com/users" }'
+        'HTTP request to execute. ' + CONFIG_DESCRIPTION
       ),
       browser_assertion: BrowserAssertionSchema.optional().describe(
         'Browser assertion to evaluate. Example: { type: "element_visible", selector: "#login-form" }'
