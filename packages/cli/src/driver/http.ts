@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import type { Driver } from "./types.js";
 import type {
   Step,
@@ -6,12 +8,152 @@ import type {
   HttpResponse,
   PollUntil,
   AssertionResultData,
+  RequestBody,
 } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/types.js";
 import { expandObject } from "../utils/template.js";
 import { getJsonPath } from "../plugin/utils.js";
 import { ProxyAgent } from "undici";
 import { parseBypassPatterns, shouldBypassProxy } from "./proxy-bypass.js";
+
+const KNOWN_BODY_TYPES = new Set([
+  "json",
+  "form",
+  "multipart",
+  "text",
+  "binary",
+  "graphql",
+]);
+
+/**
+ * Normalize legacy body shapes into the discriminated RequestBody form.
+ * - `{ type: "json"|... }` is passed through
+ * - string → { type: "text", value: string }
+ * - other object → { type: "json", value: object }
+ * - null/undefined → undefined
+ */
+export function normalizeBody(body: unknown): RequestBody | undefined {
+  if (body === undefined || body === null) return undefined;
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "type" in body &&
+    typeof (body as { type: unknown }).type === "string" &&
+    KNOWN_BODY_TYPES.has((body as { type: string }).type)
+  ) {
+    return body as RequestBody;
+  }
+  if (typeof body === "string") {
+    return { type: "text", value: body };
+  }
+  return { type: "json", value: body };
+}
+
+/**
+ * Serialize a (normalized) RequestBody into bytes for the wire.
+ * Headers are NOT touched here — that is the caller's (i.e. plan author's)
+ * responsibility, per the "send the plan as-is" principle.
+ */
+export async function buildBody(
+  body: RequestBody
+): Promise<string | Buffer> {
+  switch (body.type) {
+    case "json":
+      return JSON.stringify(body.value);
+    case "form": {
+      // We intentionally produce a string (not a URLSearchParams instance) so that
+      // undici's fetch does NOT auto-inject `Content-Type: application/x-www-form-urlencoded`.
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(body.fields)) {
+        params.append(k, String(v));
+      }
+      return params.toString();
+    }
+    case "multipart": {
+      const boundary = body.boundary ?? `----aqua-${randomBytes(12).toString("hex")}`;
+      return await buildMultipart(boundary, body.fields, body.files);
+    }
+    case "text":
+      return body.value;
+    case "binary":
+      if (body.path !== undefined) {
+        return await readFile(body.path);
+      }
+      if (body.content_base64 !== undefined) {
+        return Buffer.from(body.content_base64, "base64");
+      }
+      throw new Error("binary body must specify either path or content_base64");
+    case "graphql":
+      return JSON.stringify({
+        query: body.query,
+        variables: body.variables,
+        operationName: body.operationName,
+      });
+    default: {
+      const _exhaustive: never = body;
+      throw new Error(`Unknown body type: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+async function buildMultipart(
+  boundary: string,
+  fields: Record<string, string> | undefined,
+  files: Array<{
+    name: string;
+    path?: string;
+    content?: string;
+    content_base64?: string;
+    filename?: string;
+    content_type?: string;
+  }> | undefined
+): Promise<Buffer> {
+  const parts: Buffer[] = [];
+  const CRLF = "\r\n";
+
+  if (fields) {
+    for (const [name, value] of Object.entries(fields)) {
+      parts.push(
+        Buffer.from(
+          `--${boundary}${CRLF}` +
+            `Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}` +
+            `${value}${CRLF}`
+        )
+      );
+    }
+  }
+
+  if (files) {
+    for (const file of files) {
+      const filename = file.filename ?? file.name;
+      const contentType = file.content_type ?? "application/octet-stream";
+      let content: Buffer;
+      if (file.path !== undefined) {
+        content = await readFile(file.path);
+      } else if (file.content !== undefined) {
+        content = Buffer.from(file.content, "utf-8");
+      } else if (file.content_base64 !== undefined) {
+        content = Buffer.from(file.content_base64, "base64");
+      } else {
+        throw new Error(
+          `multipart file "${file.name}" must specify one of path / content / content_base64`
+        );
+      }
+      parts.push(
+        Buffer.from(
+          `--${boundary}${CRLF}` +
+            `Content-Disposition: form-data; name="${file.name}"; filename="${filename}"${CRLF}` +
+            `Content-Type: ${contentType}${CRLF}${CRLF}`
+        )
+      );
+      parts.push(content);
+      parts.push(Buffer.from(CRLF));
+    }
+  }
+
+  parts.push(Buffer.from(`--${boundary}--${CRLF}`));
+  return Buffer.concat(parts);
+}
 
 export class HttpDriver implements Driver {
   private proxyDispatcher: ProxyAgent | undefined;
@@ -197,10 +339,13 @@ export class HttpDriver implements Driver {
 
     const start = Date.now();
     try {
+      const normalized = normalizeBody(config.body);
+      const wireBody = normalized ? await buildBody(normalized) : undefined;
+
       const fetchOpts: Record<string, unknown> = {
         method: config.method,
         headers: config.headers,
-        body: config.body ? JSON.stringify(config.body) : undefined,
+        body: wireBody,
         signal: controller.signal,
       };
       if (this.proxyDispatcher && !shouldBypassProxy(config.url, this.bypassPatterns)) {

@@ -70,11 +70,74 @@ export const PollConfigSchema = z.object({
   timeout_ms: z.number().optional().describe("Polling timeout in ms (default: 30000)"),
 });
 
+// --- Request Body Schema ---
+//
+// QA ランナーとしてあらゆる Content-Type のリクエストを送れるよう、body を
+// discriminated union で表現する。ランナーはこの type に基づいて body をバイト列に
+// 直列化するが、Content-Type を含むヘッダーは一切自動付与しない。
+// プランに書かれたヘッダーがそのままワイヤに乗る。
+
+// Note: runtime constraints (e.g. "binary requires exactly one of path/content_base64")
+// are enforced by the runner (http.ts buildBody). Keeping them out of Zod here lets us
+// use z.discriminatedUnion which requires plain ZodObject branches (not ZodEffects).
+export const RequestBodyFileSchema = z.object({
+  name: z.string().describe("Form field name"),
+  path: z.string().optional().describe("Local file path (relative to cwd)"),
+  content: z.string().optional().describe("Inline text content"),
+  content_base64: z.string().optional().describe("Inline binary content (Base64-encoded)"),
+  filename: z.string().optional().describe("Filename to send in the multipart part"),
+  content_type: z.string().optional().describe("Content-Type for this part (e.g. image/png)"),
+});
+
+export const RequestBodySchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("json"),
+    value: z.unknown().describe("Any JSON value (object/array/primitive). Will be JSON.stringify-ed"),
+  }),
+  z.object({
+    type: z.literal("form"),
+    fields: z.record(z.string())
+      .describe("Form fields. Supports {{variable}} templates. URL-encoded by the runner"),
+  }),
+  z.object({
+    type: z.literal("multipart"),
+    boundary: z.string().optional()
+      .describe("multipart boundary string. If omitted, runner generates one. User must set matching Content-Type header"),
+    fields: z.record(z.string()).optional().describe("Text fields"),
+    files: z.array(RequestBodyFileSchema).optional().describe("File parts"),
+  }),
+  z.object({
+    type: z.literal("text"),
+    value: z.string().describe("Raw string body. Sent as UTF-8 bytes as-is"),
+  }),
+  z.object({
+    type: z.literal("binary"),
+    path: z.string().optional().describe("Local file path (relative to cwd)"),
+    content_base64: z.string().optional().describe("Inline Base64 content"),
+  }),
+  z.object({
+    type: z.literal("graphql"),
+    query: z.string().describe("GraphQL query string"),
+    variables: z.record(z.unknown()).optional().describe("GraphQL variables"),
+    operationName: z.string().optional().describe("Operation name"),
+  }),
+]);
+
+export type RequestBody = z.infer<typeof RequestBodySchema>;
+export type RequestBodyFile = z.infer<typeof RequestBodyFileSchema>;
+
+// Body accepts the new RequestBodySchema, or legacy shapes (object/string/etc.) for
+// backwards compatibility. Legacy shapes are normalized at runtime by `normalizeBody`:
+// - object → { type: "json", value: ... }
+// - string → { type: "text", value: ... }
 export const HttpRequestConfigSchema = z.object({
   method: z.string().describe("HTTP method (GET, POST, PUT, DELETE, etc.)"),
   url: z.string().describe("Request URL (supports {{variable}} templates)"),
-  headers: z.record(z.string()).optional().describe("Request headers"),
-  body: z.unknown().optional().describe("Request body (will be JSON-serialized)"),
+  headers: z.record(z.string()).optional().describe("Request headers. The runner does NOT auto-inject Content-Type; whatever you put here is sent as-is"),
+  body: z.union([RequestBodySchema, z.unknown()]).optional().describe(
+    "Request body. Prefer the discriminated form { type: 'json'|'form'|'multipart'|'text'|'binary'|'graphql', ... }. " +
+    "Legacy: an arbitrary object is treated as { type: 'json', value: object }, a string as { type: 'text', value: string }."
+  ),
   timeout: z.number().optional().describe("Request timeout in ms (default: 30000)"),
   poll: PollConfigSchema.optional().describe("Polling configuration. When set, the request is repeated at interval until the condition is met or timeout is reached"),
 });
