@@ -194,6 +194,17 @@ src/
 
 レスポンス側は `Content-Type` で text/binary を自動判定。`HttpRequestConfigSchema.response_body: "auto" | "text" | "binary"` で明示オーバーライド可。`max_response_body_size`(既定 50MB)でストリーミング読み込みのサイズキャップ。`HttpResponse` は `body`(テキスト時のみ)、`body_bytes`(バイナリ時のみ)、`body_size`、`body_sha256`、`body_truncated?`、`content_type?`、`is_binary` を持つ。バイナリレスポンスはアーティファクトとして `http_response.json`(要約) + `http_response_body`(生バイト)に分割記録される。
 
+### HTTP 認証ヘルパー (`config.auth`)
+
+`HttpRequestConfig.auth`(`HttpAuthSchema`, discriminated union)で Authorization ヘッダーを構造化指定できる。`headers` に直書きせずに済み、`{{variable}}` テンプレート展開とマスキング(`httpAuthHeaderRule`)が自動で効く。
+
+- `{ type: "basic", username, password }` → `Authorization: Basic <base64(user:pass)>`
+- `{ type: "bearer", token }` → `Authorization: Bearer <token>`
+
+`auth` が指定され、かつ `headers.Authorization` も明示的に書かれている場合、**両方の Authorization ヘッダーがそのままワイヤに乗る**(配列タプル形式で fetch に渡す)。「headers as-is」原則と整合し、ネガティブテストでも使える。
+
+将来 `digest` / `api_key` 等のブランチを追加可能(discriminated union)。
+
 ### アサーション型
 
 `qa-plan/types.ts` で Zod スキーマとして定義し、`z.infer<>` で TypeScript 型を導出（single source of truth）。全アサーションに任意の `description` フィールドあり。
@@ -205,7 +216,7 @@ src/
 ### Step Config 型
 
 `action` による discriminated union で config を型付け:
-- `HttpRequestConfigSchema` - method, url, headers, body(`RequestBodySchema`), timeout, poll, response_body, max_response_body_size
+- `HttpRequestConfigSchema` - method, url, headers, body(`RequestBodySchema`), auth(`HttpAuthSchema`), timeout, poll, response_body, max_response_body_size
 - `BrowserConfigSchema` - steps（19種のブラウザアクション）, timeout_ms
 - `StepConditionSchema` - `variable_equals` / `variable_not_equals` で条件付き実行
 

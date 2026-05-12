@@ -50,7 +50,7 @@ aqua Server                   ← data persistence & API
 
 CLI には 2 つのテストドライバーが内蔵されています:
 
-- **HTTP Driver** — あらゆる Content-Type の HTTP リクエストを送信し(JSON / form-urlencoded / ファイルアップロード multipart / 生テキスト・XML / 生バイナリ / GraphQL)、レスポンスを検証。バイナリレスポンス(PDF・画像・ダウンロード)はストリーミング読み込み + SHA-256 ハッシュ + サイズキャップ対応。アサーションは status / JSON path / ヘッダー / body サイズ / body ハッシュ / body 部分一致をカバー
+- **HTTP Driver** — あらゆる Content-Type の HTTP リクエストを送信し(JSON / form-urlencoded / ファイルアップロード multipart / 生テキスト・XML / 生バイナリ / GraphQL)、レスポンスを検証。Basic 認証 (RFC 7617) と Bearer 認証 (RFC 6750) の `auth` ヘルパー内蔵 — テンプレート展開された認証情報から `Authorization` ヘッダーをランナーが組み立てるため、シークレットは環境ファイルに置いたままにできる。バイナリレスポンス(PDF・画像・ダウンロード)はストリーミング読み込み + SHA-256 ハッシュ + サイズキャップ対応。アサーションは status / JSON path / ヘッダー / body サイズ / body ハッシュ / body 部分一致をカバー
 - **Browser Driver** — Playwright によるブラウザ自動操作(ナビゲーション、クリック、入力、スクリーンショット、iframe 切り替えなど)
 
 ## CLI コマンド

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { HttpDriver, normalizeBody, buildBody } from "./http.js";
+import {
+  HttpDriver,
+  normalizeBody,
+  buildBody,
+  buildAuthHeader,
+  buildWireHeaders,
+} from "./http.js";
 import { ProxyAgent } from "undici";
 import type { Step } from "../qa-plan/types.js";
 
@@ -844,6 +850,207 @@ describe("HttpDriver", () => {
       const result = await driver.execute(step, {});
       expect(result.response?.body_truncated).toBe(true);
       expect(result.response?.body_size).toBe(40);
+    });
+  });
+
+  describe("auth", () => {
+    describe("basic", () => {
+      it("sends Authorization: Basic <base64(user:pass)>", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              auth: { type: "basic", username: "alice", password: "s3cret" },
+            },
+          }),
+          {}
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(opts.headers).toEqual({
+          Authorization: `Basic ${Buffer.from("alice:s3cret").toString("base64")}`,
+        });
+      });
+
+      it("expands {{variable}} templates in username and password", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              auth: {
+                type: "basic",
+                username: "{{api_user}}",
+                password: "{{api_password}}",
+              },
+            },
+          }),
+          { api_user: "admin", api_password: "p@ss w0rd" }
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(opts.headers).toEqual({
+          Authorization: `Basic ${Buffer.from("admin:p@ss w0rd").toString("base64")}`,
+        });
+      });
+
+      it("merges explicit headers with the generated Authorization (no conflict)", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              headers: { "X-Trace-Id": "abc" },
+              auth: { type: "basic", username: "u", password: "p" },
+            },
+          }),
+          {}
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(opts.headers).toEqual({
+          Authorization: `Basic ${Buffer.from("u:p").toString("base64")}`,
+          "X-Trace-Id": "abc",
+        });
+      });
+    });
+
+    describe("bearer", () => {
+      it("sends Authorization: Bearer <token>", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              auth: { type: "bearer", token: "tok-xyz" },
+            },
+          }),
+          {}
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(opts.headers).toEqual({ Authorization: "Bearer tok-xyz" });
+      });
+
+      it("expands template in token", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              auth: { type: "bearer", token: "{{access_token}}" },
+            },
+          }),
+          { access_token: "ey.signed" }
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(opts.headers).toEqual({ Authorization: "Bearer ey.signed" });
+      });
+    });
+
+    describe("conflict with explicit Authorization header", () => {
+      it("sends BOTH Authorization headers as array-of-tuples", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              headers: {
+                Authorization: "Bearer explicit-tok",
+                "X-Trace-Id": "abc",
+              },
+              auth: { type: "basic", username: "u", password: "p" },
+            },
+          }),
+          {}
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        // headers must be array-of-tuples so fetch preserves both Authorization values
+        expect(Array.isArray(opts.headers)).toBe(true);
+        const tuples = opts.headers as [string, string][];
+        const authValues = tuples
+          .filter(([k]) => k.toLowerCase() === "authorization")
+          .map(([, v]) => v);
+        expect(authValues).toHaveLength(2);
+        expect(authValues).toContain(
+          `Basic ${Buffer.from("u:p").toString("base64")}`
+        );
+        expect(authValues).toContain("Bearer explicit-tok");
+        // Non-Authorization headers are preserved
+        expect(tuples).toContainEqual(["X-Trace-Id", "abc"]);
+      });
+
+      it("detects existing Authorization case-insensitively", async () => {
+        mockFetch.mockReturnValue(successResponse("{}"));
+        await driver.execute(
+          httpStep({
+            config: {
+              method: "GET",
+              url: "http://x/",
+              headers: { authorization: "Bearer lower" },
+              auth: { type: "basic", username: "u", password: "p" },
+            },
+          }),
+          {}
+        );
+        const opts = mockFetch.mock.calls[0][1];
+        expect(Array.isArray(opts.headers)).toBe(true);
+      });
+    });
+
+    it("does not set Authorization when auth is omitted (existing behavior)", async () => {
+      mockFetch.mockReturnValue(successResponse("{}"));
+      await driver.execute(httpStep(), {});
+      const opts = mockFetch.mock.calls[0][1];
+      // headers remains undefined / plain when no auth and no explicit headers
+      expect(opts.headers).toBeUndefined();
+    });
+  });
+
+  describe("buildAuthHeader direct", () => {
+    it("returns undefined for undefined auth", () => {
+      expect(buildAuthHeader(undefined)).toBeUndefined();
+    });
+
+    it("builds basic", () => {
+      expect(buildAuthHeader({ type: "basic", username: "a", password: "b" }))
+        .toBe(`Basic ${Buffer.from("a:b").toString("base64")}`);
+    });
+
+    it("builds bearer", () => {
+      expect(buildAuthHeader({ type: "bearer", token: "tk" })).toBe(
+        "Bearer tk"
+      );
+    });
+  });
+
+  describe("buildWireHeaders direct", () => {
+    it("passes explicit through when no auth header", () => {
+      expect(buildWireHeaders({ "X-A": "1" }, undefined)).toEqual({ "X-A": "1" });
+      expect(buildWireHeaders(undefined, undefined)).toBeUndefined();
+    });
+
+    it("merges plain object when no Authorization conflict", () => {
+      expect(buildWireHeaders({ "X-A": "1" }, "Basic xxx")).toEqual({
+        Authorization: "Basic xxx",
+        "X-A": "1",
+      });
+    });
+
+    it("returns array-of-tuples with both Authorization headers on conflict", () => {
+      const out = buildWireHeaders(
+        { Authorization: "Bearer e", "X-A": "1" },
+        "Basic g"
+      );
+      expect(Array.isArray(out)).toBe(true);
+      expect(out as [string, string][]).toEqual([
+        ["Authorization", "Basic g"],
+        ["Authorization", "Bearer e"],
+        ["X-A", "1"],
+      ]);
     });
   });
 

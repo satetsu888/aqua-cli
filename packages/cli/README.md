@@ -52,7 +52,7 @@ aqua Server                   ← data persistence & API
 
 The CLI embeds two test drivers:
 
-- **HTTP Driver** — sends HTTP requests of any Content-Type (JSON, form-urlencoded, multipart with file uploads, raw text/XML, raw binary, GraphQL) and validates responses. Binary responses (PDF, images, downloads) are read with streaming + SHA-256 hashing and a configurable size cap. Assertions cover status, JSON path, headers, body size, body hash, and body substring matching.
+- **HTTP Driver** — sends HTTP requests of any Content-Type (JSON, form-urlencoded, multipart with file uploads, raw text/XML, raw binary, GraphQL) and validates responses. Built-in `auth` helper for Basic (RFC 7617) and Bearer (RFC 6750) — the runner assembles the `Authorization` header from templated credentials so secrets stay in the environment file. Binary responses (PDF, images, downloads) are read with streaming + SHA-256 hashing and a configurable size cap. Assertions cover status, JSON path, headers, body size, body hash, and body substring matching.
 - **Browser Driver** — automates browsers via Playwright (navigate, click, fill, screenshot, iframe switching, etc.)
 
 ## CLI Commands

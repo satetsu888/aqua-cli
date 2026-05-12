@@ -126,6 +126,26 @@ export const RequestBodySchema = z.discriminatedUnion("type", [
 export type RequestBody = z.infer<typeof RequestBodySchema>;
 export type RequestBodyFile = z.infer<typeof RequestBodyFileSchema>;
 
+// --- Authentication Helper Schema ---
+//
+// 認証ヘッダー組み立て用の構造化フィールド。`headers` に直接書くのではなく
+// `auth` で意図を表現することで、テンプレート展開された credentials の base64 化
+// (basic) や `Bearer` プレフィックス付与 (bearer) を runner が担う。
+// discriminated union なので、将来 digest / api_key / sigv4 等を1ブランチで追加できる。
+export const HttpAuthSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("basic"),
+    username: z.string().describe("Username (supports {{variable}} templates)"),
+    password: z.string().describe("Password (supports {{variable}} templates)"),
+  }),
+  z.object({
+    type: z.literal("bearer"),
+    token: z.string().describe("Bearer token (supports {{variable}} templates)"),
+  }),
+]);
+
+export type HttpAuth = z.infer<typeof HttpAuthSchema>;
+
 // Body accepts the new RequestBodySchema, or legacy shapes (object/string/etc.) for
 // backwards compatibility. Legacy shapes are normalized at runtime by `normalizeBody`:
 // - object → { type: "json", value: ... }
@@ -137,6 +157,11 @@ export const HttpRequestConfigSchema = z.object({
   body: z.union([RequestBodySchema, z.unknown()]).optional().describe(
     "Request body. Prefer the discriminated form { type: 'json'|'form'|'multipart'|'text'|'binary'|'graphql', ... }. " +
     "Legacy: an arbitrary object is treated as { type: 'json', value: object }, a string as { type: 'text', value: string }."
+  ),
+  auth: HttpAuthSchema.optional().describe(
+    "Authentication helper. The runner builds the corresponding Authorization header. " +
+    "Supported types: 'basic' (RFC 7617, base64(user:pass)), 'bearer' (RFC 6750). " +
+    "If an explicit Authorization header is also set in `headers`, BOTH headers are sent on the wire (the runner does not deduplicate)."
   ),
   timeout: z.number().optional().describe("Request timeout in ms (default: 30000)"),
   poll: PollConfigSchema.optional().describe("Polling configuration. When set, the request is repeated at interval until the condition is met or timeout is reached"),

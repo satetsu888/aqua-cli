@@ -25,6 +25,10 @@ export const CONFIG_DESCRIPTION = `Examples:
 
 http_request (GET): { method: "GET", url: "{{api_base_url}}/users", headers: { "Authorization": "Bearer {{token}}" } }
 
+http_request (Basic auth via auth helper — preferred over hand-rolling the header): { method: "GET", url: "{{api_base_url}}/admin", auth: { type: "basic", username: "{{admin_user}}", password: "{{admin_password}}" } }
+
+http_request (Bearer auth via auth helper): { method: "GET", url: "{{api_base_url}}/me", auth: { type: "bearer", token: "{{access_token}}" } }
+
 http_request (POST JSON — the most common case): { method: "POST", url: "{{api_base_url}}/users", headers: { "Content-Type": "application/json" }, body: { type: "json", value: { name: "test" } } }
 
 http_request (form-urlencoded): { method: "POST", url: "{{api_base_url}}/login", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: { type: "form", fields: { username: "{{user}}", password: "{{password}}" } } }
@@ -48,6 +52,7 @@ http_request (legacy shorthand body — still supported; auto-treated as { type:
 IMPORTANT — header handling for http_request:
 - The runner sends every header EXACTLY as written, and does NOT auto-inject Content-Type. If you want a Content-Type, write it in headers yourself. This makes negative tests (deliberate header/body mismatch) representable.
 - For multipart, you must write both: a "boundary" in body AND a matching "Content-Type: multipart/form-data; boundary=<same>" in headers.
+- The "auth" field is the ONE exception: when set, the runner adds the matching Authorization header (Basic / Bearer). If you ALSO write an explicit Authorization in headers, both headers are sent on the wire — the runner does not deduplicate (intentional, so negative tests with conflicting auth are representable).
 
 Response body handling:
 - response_body: "auto" | "text" | "binary" (default: "auto", which decides by Content-Type).

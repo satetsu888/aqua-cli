@@ -9,6 +9,7 @@ import type {
   PollUntil,
   AssertionResultData,
   RequestBody,
+  HttpAuth,
 } from "../qa-plan/types.js";
 import type { ResolvedProxyConfig } from "../environment/types.js";
 import { expandObject } from "../utils/template.js";
@@ -265,6 +266,57 @@ async function buildMultipart(
   return Buffer.concat(parts);
 }
 
+/**
+ * Build the Authorization header value for the given auth config.
+ * Returns undefined when no auth is configured.
+ */
+export function buildAuthHeader(auth: HttpAuth | undefined): string | undefined {
+  if (!auth) return undefined;
+  switch (auth.type) {
+    case "basic": {
+      const token = Buffer.from(`${auth.username}:${auth.password}`).toString(
+        "base64"
+      );
+      return `Basic ${token}`;
+    }
+    case "bearer":
+      return `Bearer ${auth.token}`;
+    default: {
+      const _exhaustive: never = auth;
+      throw new Error(`Unknown auth type: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * Combine an explicit headers dict with an auth-generated Authorization header.
+ *
+ * - No auth header → return the explicit dict (or undefined) unchanged.
+ * - No conflict → return a plain object with both, so callers/tests can still
+ *   pattern-match on a dict shape.
+ * - Conflict (explicit Authorization AND auth header) → return an array of
+ *   tuples so fetch sends BOTH Authorization headers on the wire. The runner
+ *   intentionally does not deduplicate to keep the "headers as-is" principle
+ *   (the user wrote an explicit Authorization for a reason).
+ */
+export function buildWireHeaders(
+  explicit: Record<string, string> | undefined,
+  authHeader: string | undefined
+): Record<string, string> | [string, string][] | undefined {
+  if (!authHeader) return explicit;
+  const explicitHasAuth = explicit
+    ? Object.keys(explicit).some((k) => k.toLowerCase() === "authorization")
+    : false;
+  if (!explicitHasAuth) {
+    return { Authorization: authHeader, ...(explicit ?? {}) };
+  }
+  const tuples: [string, string][] = [["Authorization", authHeader]];
+  for (const [k, v] of Object.entries(explicit!)) {
+    tuples.push([k, v]);
+  }
+  return tuples;
+}
+
 export class HttpDriver implements Driver {
   private proxyDispatcher: ProxyAgent | undefined;
   private bypassPatterns: string[] = [];
@@ -366,6 +418,7 @@ export class HttpDriver implements Driver {
       url: config.url,
       headers: config.headers,
       body: config.body,
+      auth: config.auth,
       timeout: config.timeout,
     };
 
@@ -451,10 +504,14 @@ export class HttpDriver implements Driver {
     try {
       const normalized = normalizeBody(config.body);
       const wireBody = normalized ? await buildBody(normalized) : undefined;
+      const wireHeaders = buildWireHeaders(
+        config.headers,
+        buildAuthHeader(config.auth)
+      );
 
       const fetchOpts: Record<string, unknown> = {
         method: config.method,
-        headers: config.headers,
+        headers: wireHeaders,
         body: wireBody,
         signal: controller.signal,
       };
