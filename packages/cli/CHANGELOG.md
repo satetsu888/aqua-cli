@@ -1,5 +1,22 @@
 # @aquaqa/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- [`343ce87`](https://github.com/satetsu888/aqua-cli/commit/343ce876860dc73e3f5da3001d402bbd9c4a0988) Thanks [@satetsu888](https://github.com/satetsu888)! - Add `auth` helper to `http_request` for structured Authorization headers.
+
+  The new `HttpRequestConfig.auth` field (discriminated union, `HttpAuthSchema`) lets plans declare authentication intent without hand-rolling the header value:
+
+  - `{ type: "basic", username, password }` → `Authorization: Basic <base64(user:pass)>`
+  - `{ type: "bearer", token }` → `Authorization: Bearer <token>`
+
+  `username` / `password` / `token` go through the standard `{{variable}}` template expansion, so credentials can live in environment-file secrets. The generated `Authorization` header value is masked by the existing `httpAuthHeaderRule` before artifacts are recorded.
+
+  When both `auth` and an explicit `Authorization` header in `headers` are set, **both Authorization headers are sent on the wire** (the runner does not deduplicate). This keeps the "headers as-is" principle and lets negative tests express auth conflicts deliberately.
+
+  Schema additions are purely additive — existing plans continue to work unchanged. The discriminated union shape leaves room to add `digest` / `api_key` / etc. later.
+
 ## 0.7.0
 
 ### Minor Changes
